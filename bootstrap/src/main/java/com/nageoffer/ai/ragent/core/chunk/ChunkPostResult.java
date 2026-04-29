@@ -15,34 +15,35 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.core.chunk;
 
+import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 /**
- * 知识库 Chunk 创建请求
+ * 分块后处理结果
+ * 封装后处理器产出的"需要嵌入的 chunks"、"放入 context 的 chunks"以及"结果描述"
  */
 @Data
-public class KnowledgeChunkCreateRequest {
+@Builder
+public class ChunkPostResult {
 
     /**
-     * 分块正文内容
+     * 需要调用嵌入服务的 chunks
+     * 对于父子策略，只有子块需要嵌入
      */
-    private String content;
+    private List<VectorChunk> chunksToEmbed;
 
     /**
-     * 下标
+     * 放入 context.chunks 的 chunks
+     * 通常与 chunksToEmbed 相同，但不强制一致
      */
-    private Integer index;
+    private List<VectorChunk> contextChunks;
 
     /**
-     * 分块 ID
+     * 结果描述信息
      */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
+    private String summary;
 }

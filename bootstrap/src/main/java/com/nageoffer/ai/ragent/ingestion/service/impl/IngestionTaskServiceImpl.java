@@ -176,14 +176,14 @@ public class IngestionTaskServiceImpl implements IngestionTaskService {
                 .taskId(result.getTaskId())
                 .pipelineId(result.getPipelineId())
                 .status(result.getStatus())
-                .chunkCount(result.getChunks() == null ? 0 : result.getChunks().size())
+                .chunkCount(countIndexableChunks(result.getChunks()))
                 .message(result.getError() == null ? "OK" : result.getError().getMessage())
                 .build();
     }
 
     private void updateTaskFromContext(IngestionTaskDO task, IngestionContext context) {
         task.setStatus(context.getStatus() == null ? IngestionStatus.FAILED.getValue() : context.getStatus().getValue());
-        task.setChunkCount(context.getChunks() == null ? 0 : context.getChunks().size());
+        task.setChunkCount(countIndexableChunks(context.getChunks()));
         task.setErrorMessage(context.getError() == null ? null : context.getError().getMessage());
         task.setCompletedAt(new Date());
         task.setUpdatedBy(UserContext.getUsername());
@@ -295,6 +295,16 @@ public class IngestionTaskServiceImpl implements IngestionTaskService {
             return pipelineId;
         }
         throw new ClientException("必须传流水线ID");
+    }
+
+    /**
+     * 统计可索引的 chunk 数量（排除父块，父块不进向量库）
+     */
+    private int countIndexableChunks(java.util.List<com.nageoffer.ai.ragent.core.chunk.VectorChunk> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return 0;
+        }
+        return (int) chunks.stream().filter(c -> !c.isParent()).count();
     }
 
     private String normalizeStatus(String status) {

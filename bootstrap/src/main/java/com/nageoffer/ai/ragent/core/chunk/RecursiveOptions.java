@@ -15,34 +15,26 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.core.chunk;
 
-import lombok.Data;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 知识库 Chunk 创建请求
+ * 递归分块配置
+ *
+ * @param chunkSize   目标块大小（字符数）
+ * @param overlapSize 相邻块重叠大小（字符数）
+ * @param separators  多级分隔符列表（按优先级从高到低），为空时使用内置默认值
  */
-@Data
-public class KnowledgeChunkCreateRequest {
+public record RecursiveOptions(
+        int chunkSize,
+        int overlapSize,
+        List<String> separators
+) implements ChunkingOptions {
 
-    /**
-     * 分块正文内容
-     */
-    private String content;
-
-    /**
-     * 下标
-     */
-    private Integer index;
-
-    /**
-     * 分块 ID
-     */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
+    @Override
+    public Map<String, Integer> toConfigMap() {
+        return Map.of("chunkSize", chunkSize, "overlapSize", overlapSize);
+    }
 }

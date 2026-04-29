@@ -58,8 +58,20 @@ public class VectorChunk {
     private Map<String, Object> metadata = new HashMap<>();
 
     /**
+     * 父块ID（父子分块模式下，子块指向其所属父块）
+     * 普通分块模式下为 null
+     */
+    private String parentId;
+
+    /**
+     * 是否为父块（父子分块模式下标识父块，普通分块为 false）
+     */
+    @Builder.Default
+    private boolean parent = false;
+
+    /**
      * 块的向量嵌入表示
-     * 用于向量相似度检索的浮点数数组
+     * 用于向量相似度检索的浮点数组
      */
     @JsonIgnore
     private float[] embedding;

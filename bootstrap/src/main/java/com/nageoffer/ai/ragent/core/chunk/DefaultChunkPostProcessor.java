@@ -15,34 +15,25 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.core.chunk;
 
-import lombok.Data;
+import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
+
+import java.util.List;
 
 /**
- * 知识库 Chunk 创建请求
+ * 默认分块后处理器
+ * 适用于 FIXED_SIZE、RECURSIVE、STRUCTURE_AWARE 等扁平分块策略
+ * 所有 chunks 统一嵌入，全部放入 context
  */
-@Data
-public class KnowledgeChunkCreateRequest {
+public class DefaultChunkPostProcessor implements ChunkPostProcessor {
 
-    /**
-     * 分块正文内容
-     */
-    private String content;
-
-    /**
-     * 下标
-     */
-    private Integer index;
-
-    /**
-     * 分块 ID
-     */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
+    @Override
+    public ChunkPostResult process(List<VectorChunk> allChunks, IngestionContext context) {
+        return ChunkPostResult.builder()
+                .chunksToEmbed(allChunks)
+                .contextChunks(allChunks)
+                .summary("已分块 " + allChunks.size() + " 段")
+                .build();
+    }
 }

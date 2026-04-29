@@ -75,7 +75,9 @@ const NODE_TYPE_OPTIONS = [
 
 const CHUNK_STRATEGY_OPTIONS = [
   { value: "fixed_size", label: "fixed_size" },
-  { value: "structure_aware", label: "structure_aware" }
+  { value: "structure_aware", label: "structure_aware" },
+  { value: "recursive", label: "recursive" },
+  { value: "parent_child", label: "parent_child" }
 ];
 
 const ENHANCER_TASK_OPTIONS = [
@@ -927,7 +929,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
         return { ok: false as const, message: "节点类型不能为空" };
       }
       let settings: Record<string, unknown> | undefined;
-      let condition: unknown;
+      let condition: Record<string, unknown> | null | undefined;
       try {
         settings = buildSettings(node) as Record<string, unknown> | undefined;
         condition = parseCondition(node.condition);

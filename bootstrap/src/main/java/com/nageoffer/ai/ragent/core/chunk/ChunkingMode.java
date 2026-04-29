@@ -50,6 +50,37 @@ public enum ChunkingMode {
                     targetSize != null ? targetSize : 512,
                     overlapSize != null ? overlapSize : 128);
         }
+
+        @Override
+        public ChunkPostProcessor getPostProcessor() {
+            return new DefaultChunkPostProcessor();
+        }
+    },
+
+    /**
+     * 递归切分 - 按多级分隔符优先级递归拆分
+     */
+    RECURSIVE("recursive", "递归分块", true) {
+        @Override
+        public ChunkingOptions createOptions(Map<String, Object> config) {
+            return new RecursiveOptions(
+                    toInt(config, "chunkSize", 512),
+                    toInt(config, "overlapSize", 128),
+                    null);
+        }
+
+        @Override
+        public ChunkingOptions createDefaultOptions(Integer targetSize, Integer overlapSize) {
+            return new RecursiveOptions(
+                    targetSize != null ? targetSize : 512,
+                    overlapSize != null ? overlapSize : 128,
+                    null);
+        }
+
+        @Override
+        public ChunkPostProcessor getPostProcessor() {
+            return new DefaultChunkPostProcessor();
+        }
     },
 
     /**
@@ -72,6 +103,37 @@ public enum ChunkingMode {
                     overlapSize != null ? overlapSize : 0,
                     1800,
                     600);
+        }
+
+        @Override
+        public ChunkPostProcessor getPostProcessor() {
+            return new DefaultChunkPostProcessor();
+        }
+    },
+
+    /**
+     * 父子分块 - 先切大块（父），再切小块（子），子块嵌入向量，父块提供上下文
+     */
+    PARENT_CHILD("parent_child", "父子分块", true) {
+        @Override
+        public ChunkingOptions createOptions(Map<String, Object> config) {
+            return new ParentChildOptions(
+                    toInt(config, "parentChunkSize", 2000),
+                    toInt(config, "childChunkSize", 500),
+                    toInt(config, "overlapSize", 100));
+        }
+
+        @Override
+        public ChunkingOptions createDefaultOptions(Integer targetSize, Integer overlapSize) {
+            return new ParentChildOptions(
+                    targetSize != null ? targetSize : 2000,
+                    500,
+                    overlapSize != null ? overlapSize : 100);
+        }
+
+        @Override
+        public ChunkPostProcessor getPostProcessor() {
+            return new ParentChildChunkPostProcessor();
         }
     };
 
@@ -107,6 +169,14 @@ public enum ChunkingMode {
      * @param overlapSize 通用的重叠大小，null 时使用默认值
      */
     public abstract ChunkingOptions createDefaultOptions(Integer targetSize, Integer overlapSize);
+
+    /**
+     * 获取该分块策略对应的后处理器
+     * 不同策略（如父子分块）需要不同的后处理逻辑
+     *
+     * @return 后处理器实例
+     */
+    public abstract ChunkPostProcessor getPostProcessor();
 
     // ============ 解析工具 ============
 

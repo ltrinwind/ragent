@@ -31,92 +31,35 @@ import lombok.NoArgsConstructor;
 import java.util.Date;
 
 /**
- * RAG 知识库文档分块表实体
+ * 父子分块 - 父块表实体
+ * 父块不嵌入向量，仅存储全文内容，检索时子块命中后上溯取父块上下文。
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("t_knowledge_chunk")
-public class KnowledgeChunkDO {
+@TableName("t_knowledge_chunk_parent")
+public class KnowledgeChunkParentDO {
 
-    /**
-     * ID
-     */
     @TableId(type = IdType.ASSIGN_ID)
     private String id;
 
-    /**
-     * 知识库ID
-     */
     private String kbId;
 
-    /**
-     * 文档ID
-     */
     private String docId;
 
-    /**
-     * 分块序号（从0开始）
-     */
-    private Integer chunkIndex;
-
-    /**
-     * 分块正文内容
-     */
     private String content;
 
-    /**
-     * 内容哈希（用于幂等/去重）
-     */
-    private String contentHash;
-
-    /**
-     * 字符数（可用于统计/调参）
-     */
     private Integer charCount;
 
-    /**
-     * Token数（可选）
-     */
-    private Integer tokenCount;
+    private Integer childCount;
 
-    /**
-     * 是否启用 0：禁用 1：启用
-     */
-    private Integer enabled;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
-
-    /**
-     * 创建人
-     */
-    private String createdBy;
-
-    /**
-     * 修改人
-     */
-    private String updatedBy;
-
-    /**
-     * 创建时间
-     */
     @TableField(fill = FieldFill.INSERT)
     private Date createTime;
 
-    /**
-     * 更新时间
-     */
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private Date updateTime;
 
-    /**
-     * 是否删除 0：正常 1：删除
-     */
     @TableLogic
     private Integer deleted;
 }

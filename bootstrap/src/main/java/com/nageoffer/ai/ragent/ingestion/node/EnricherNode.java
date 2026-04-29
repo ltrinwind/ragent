@@ -74,6 +74,10 @@ public class EnricherNode implements IngestionNode {
             if (chunk == null || !StringUtils.hasText(chunk.getContent())) {
                 continue;
             }
+            // 父块不需要增强（不会嵌入也不进向量库）
+            if (chunk.isParent()) {
+                continue;
+            }
             if (chunk.getMetadata() == null) {
                 chunk.setMetadata(new HashMap<>());
             }

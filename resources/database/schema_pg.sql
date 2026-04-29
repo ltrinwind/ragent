@@ -122,9 +122,9 @@ CREATE TABLE t_knowledge_base (
     updated_by      VARCHAR(20),
     create_time     TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time     TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted         SMALLINT     NOT NULL DEFAULT 0,
-    CONSTRAINT uk_collection_name UNIQUE (collection_name)
+    deleted         SMALLINT     NOT NULL DEFAULT 0
 );
+CREATE UNIQUE INDEX uk_collection_name ON t_knowledge_base (collection_name) WHERE deleted = 0;
 CREATE INDEX idx_kb_name ON t_knowledge_base (name);
 COMMENT ON TABLE t_knowledge_base IS '知识库表';
 
@@ -173,6 +173,26 @@ CREATE TABLE t_knowledge_chunk (
 );
 CREATE INDEX idx_doc_id ON t_knowledge_chunk (doc_id);
 COMMENT ON TABLE t_knowledge_chunk IS '知识库文档分块表';
+
+-- 父子分块：父块表
+CREATE TABLE t_knowledge_chunk_parent (
+    id           VARCHAR(20)      NOT NULL PRIMARY KEY,
+    kb_id        VARCHAR(20)      NOT NULL,
+    doc_id       VARCHAR(20)      NOT NULL,
+    content      TEXT        NOT NULL,
+    char_count   INTEGER,
+    child_count  INTEGER,
+    create_time  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted      SMALLINT    NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_parent_doc_id ON t_knowledge_chunk_parent (doc_id);
+COMMENT ON TABLE t_knowledge_chunk_parent IS '父子分块-父块表';
+
+-- 父子分块：子块加 parent_id 列
+ALTER TABLE t_knowledge_chunk ADD COLUMN IF NOT EXISTS parent_id VARCHAR(20) NULL;
+CREATE INDEX IF NOT EXISTS idx_chunk_parent_id ON t_knowledge_chunk (parent_id);
+COMMENT ON COLUMN t_knowledge_chunk.parent_id IS '父块ID（父子分块模式）';
 
 CREATE TABLE t_knowledge_document_chunk_log (
     id                 VARCHAR(20)      NOT NULL PRIMARY KEY,
@@ -531,6 +551,17 @@ COMMENT ON COLUMN t_knowledge_chunk.updated_by IS '修改人';
 COMMENT ON COLUMN t_knowledge_chunk.create_time IS '创建时间';
 COMMENT ON COLUMN t_knowledge_chunk.update_time IS '更新时间';
 COMMENT ON COLUMN t_knowledge_chunk.deleted IS '是否删除 0：正常 1：删除';
+
+-- t_knowledge_chunk_parent
+COMMENT ON COLUMN t_knowledge_chunk_parent.id IS 'ID';
+COMMENT ON COLUMN t_knowledge_chunk_parent.kb_id IS '知识库ID';
+COMMENT ON COLUMN t_knowledge_chunk_parent.doc_id IS '文档ID';
+COMMENT ON COLUMN t_knowledge_chunk_parent.content IS '父块全文内容';
+COMMENT ON COLUMN t_knowledge_chunk_parent.char_count IS '字符数';
+COMMENT ON COLUMN t_knowledge_chunk_parent.child_count IS '子块数量';
+COMMENT ON COLUMN t_knowledge_chunk_parent.create_time IS '创建时间';
+COMMENT ON COLUMN t_knowledge_chunk_parent.update_time IS '更新时间';
+COMMENT ON COLUMN t_knowledge_chunk_parent.deleted IS '是否删除 0：正常 1：删除';
 
 -- t_knowledge_document_chunk_log
 COMMENT ON COLUMN t_knowledge_document_chunk_log.id IS 'ID';

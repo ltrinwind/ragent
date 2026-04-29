@@ -78,9 +78,16 @@ public class IndexerNode implements IngestionNode {
 
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
-        List<VectorChunk> chunks = context.getChunks();
-        if (chunks == null || chunks.isEmpty()) {
+        List<VectorChunk> allChunks = context.getChunks();
+        if (allChunks == null || allChunks.isEmpty()) {
             return NodeResult.fail(new ClientException("没有可索引的分块"));
+        }
+        // 过滤父块：父块不含 embedding，不应写入向量库
+        List<VectorChunk> chunks = allChunks.stream()
+                .filter(c -> !c.isParent())
+                .toList();
+        if (chunks.isEmpty()) {
+            return NodeResult.fail(new ClientException("没有可索引的分块（仅含父块）"));
         }
         IndexerSettings settings = parseSettings(config.getSettings());
         String collectionName = resolveCollectionName(context);
@@ -102,8 +109,10 @@ public class IndexerNode implements IngestionNode {
         ensureVectorSpace(collectionName);
         List<JsonObject> rows = buildRows(context, chunks, vectorArray, settings.getMetadataFields());
 
+        // TODO: 这里直接改为硬编码,只能外部事务统一写入得了
         if (context.isSkipIndexerWrite()) {
             // 调用方会在事务中统一写向量，此处只做校验和 chunkId/embedding 的填充（buildRows 已完成）
+            // KnowledgeDocumentServiceImpl#persistChunksAndVectorsAtomically 方法中可见
             return NodeResult.ok("已准备 " + rows.size() + " 个分块（向量写入由调用方统一完成）");
         }
 

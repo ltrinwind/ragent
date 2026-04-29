@@ -15,34 +15,10 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.knowledge.dao.mapper;
 
-import lombok.Data;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.nageoffer.ai.ragent.knowledge.dao.entity.KnowledgeChunkParentDO;
 
-/**
- * 知识库 Chunk 创建请求
- */
-@Data
-public class KnowledgeChunkCreateRequest {
-
-    /**
-     * 分块正文内容
-     */
-    private String content;
-
-    /**
-     * 下标
-     */
-    private Integer index;
-
-    /**
-     * 分块 ID
-     */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
+public interface KnowledgeChunkParentMapper extends BaseMapper<KnowledgeChunkParentDO> {
 }

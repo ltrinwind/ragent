@@ -90,14 +90,15 @@ public class NodeOutputExtractor {
 
     private Map<String, Object> chunkerOutput(IngestionContext context) {
         Map<String, Object> output = new LinkedHashMap<>();
-        output.put("chunkCount", context.getChunks() == null ? 0 : context.getChunks().size());
+        output.put("chunkCount", countIndexable(context));
         output.put("chunks", context.getChunks());
+        output.put("metadata", context.getMetadata());
         return output;
     }
 
     private Map<String, Object> enricherOutput(IngestionContext context) {
         Map<String, Object> output = new LinkedHashMap<>();
-        output.put("chunkCount", context.getChunks() == null ? 0 : context.getChunks().size());
+        output.put("chunkCount", countIndexable(context));
         output.put("chunks", context.getChunks());
         return output;
     }
@@ -105,7 +106,7 @@ public class NodeOutputExtractor {
     private Map<String, Object> indexerOutput(IngestionContext context, NodeConfig config) {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("settings", config.getSettings());
-        output.put("chunkCount", context.getChunks() == null ? 0 : context.getChunks().size());
+        output.put("chunkCount", countIndexable(context));
         output.put("chunks", context.getChunks());
         return output;
     }
@@ -131,5 +132,15 @@ public class NodeOutputExtractor {
         } catch (IllegalArgumentException ex) {
             return null;
         }
+    }
+
+    /**
+     * 统计可索引的 chunk 数量（排除父块）
+     */
+    private int countIndexable(IngestionContext context) {
+        if (context.getChunks() == null || context.getChunks().isEmpty()) {
+            return 0;
+        }
+        return (int) context.getChunks().stream().filter(c -> !c.isParent()).count();
     }
 }

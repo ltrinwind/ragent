@@ -15,34 +15,29 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.core.chunk;
 
-import lombok.Data;
+import java.util.Map;
 
 /**
- * 知识库 Chunk 创建请求
+ * 父子分块配置
+ *
+ * @param parentChunkSize 父块目标大小（字符数）
+ * @param childChunkSize  子块目标大小（字符数）
+ * @param overlapSize     子块间重叠大小（字符数）
  */
-@Data
-public class KnowledgeChunkCreateRequest {
+public record ParentChildOptions(
+        int parentChunkSize,
+        int childChunkSize,
+        int overlapSize
+) implements ChunkingOptions {
 
-    /**
-     * 分块正文内容
-     */
-    private String content;
-
-    /**
-     * 下标
-     */
-    private Integer index;
-
-    /**
-     * 分块 ID
-     */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
+    @Override
+    public Map<String, Integer> toConfigMap() {
+        return Map.of(
+                "parentChunkSize", parentChunkSize,
+                "childChunkSize", childChunkSize,
+                "overlapSize", overlapSize
+        );
+    }
 }

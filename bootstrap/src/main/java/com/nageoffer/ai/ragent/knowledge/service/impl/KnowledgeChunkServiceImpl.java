@@ -130,6 +130,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .contentHash(contentHash)
                 .charCount(charCount)
                 .tokenCount(tokenCount)
+                .parentId(requestParam.getParentId())
                 .enabled(1)
                 .createdBy(UserContext.getUsername())
                 .updatedBy(UserContext.getUsername())
@@ -207,6 +208,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                     .charCount(content.length())
                     .tokenCount(resolveTokenCount(content))
                     .enabled(1)
+                    .parentId(request.getParentId())
                     .createdBy(username)
                     .updatedBy(username)
                     .build();
