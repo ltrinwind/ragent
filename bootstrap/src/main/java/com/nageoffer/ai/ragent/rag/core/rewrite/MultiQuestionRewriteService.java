@@ -97,6 +97,14 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
         // 兜底：使用归一化结果 + 规则拆分
     }
 
+
+    /**
+     * 基于 LLM 的问句改写和拆分,提高召回覆盖率
+     * @param normalizedQuestion 归一化后的用户问句
+     * @param originalQuestion 原始用户问句
+     * @param history 对话历史
+     * @return 改写拆分后的问句和子问题集合
+     */
     private RewriteResult callLLMRewriteAndSplit(String normalizedQuestion,
                                                  String originalQuestion,
                                                  List<ChatMessage> history) {
@@ -135,7 +143,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
             messages.add(ChatMessage.system(systemPrompt));
         }
 
-        // 只保留最近 1-2 轮的 User 和 Assistant 消息
+        // 只保留最近的 User 和 Assistant 消息
         // 过滤掉 System 摘要，避免 Token 浪费
         if (CollUtil.isNotEmpty(history)) {
             List<ChatMessage> recentHistory = history.stream()
@@ -193,6 +201,7 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
         }
     }
 
+    // 不基于 LLM 的拆分,而是基于常见问号的拆分问句
     private List<String> ruleBasedSplit(String question) {
         // 兜底：按常见分隔符拆分
         List<String> parts = Arrays.stream(question.split("[?？。；;\\n]+"))

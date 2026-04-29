@@ -110,6 +110,8 @@ public class JdbcConversationMemoryStore implements ConversationMemoryStore {
         );
     }
 
+
+    // 保证对话从 user 开始
     private List<ChatMessage> normalizeHistory(List<ChatMessage> messages) {
         if (messages == null || messages.isEmpty()) {
             return List.of();

@@ -29,6 +29,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * 基于表的词归一化
+ * 其实感觉作用不是很大,不如交给 LLM 改写统一处理,在改写 prompt 里加一条规则"将领域别名替换为标准术语
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

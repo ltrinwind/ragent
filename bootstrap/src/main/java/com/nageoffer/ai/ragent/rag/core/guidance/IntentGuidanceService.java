@@ -40,6 +40,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+
+/**
+ * 歧义检测和引导相关
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -86,6 +90,7 @@ public class IntentGuidanceService {
                 .sorted(Comparator.comparingDouble(NodeScore::getScore).reversed())
                 .toList();
 
+        // 没有多个意图,直接返回
         if (ranked.size() < 2) {
             return null;
         }
@@ -103,6 +108,10 @@ public class IntentGuidanceService {
         return new AmbiguityGroup(topicName, trimmedRanked);
     }
 
+
+    /**
+     * 判断是否应该跳过歧义引导
+     */
     private boolean shouldSkipGuidance(String question, List<NodeScore> ranked) {
         double top = ranked.get(0).getScore();
         if (top <= 0) {
@@ -139,6 +148,9 @@ public class IntentGuidanceService {
         return false;
     }
 
+    /**
+     * 基于 LLM 的二次歧义判断
+     */
     private boolean confirmAmbiguity(String question, List<NodeScore> ranked) {
         double top = ranked.get(0).getScore();
         double second = ranked.get(1).getScore();
@@ -164,6 +176,9 @@ public class IntentGuidanceService {
         return false;
     }
 
+    /**
+     * 过滤掉分数低于 INTENT_MIN_SCORE(0.35) 的 KB 类型候选
+     */
     private List<NodeScore> filterCandidates(List<NodeScore> scores) {
         if (CollUtil.isEmpty(scores)) {
             return List.of();

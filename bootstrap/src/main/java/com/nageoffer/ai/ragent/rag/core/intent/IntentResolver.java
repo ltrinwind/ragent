@@ -53,6 +53,7 @@ public class IntentResolver {
         List<String> subQuestions = CollUtil.isNotEmpty(rewriteResult.subQuestions())
                 ? rewriteResult.subQuestions()
                 : List.of(rewriteResult.rewrittenQuestion());
+        // 多线程并行为每一个子问题调用 LLM 找匹配的意图节点
         List<CompletableFuture<SubQuestionIntent>> tasks = subQuestions.stream()
                 .map(q -> CompletableFuture.supplyAsync(
                         () -> {
@@ -88,6 +89,7 @@ public class IntentResolver {
                 && nodeScores.get(0).getNode().getKind() == SYSTEM;
     }
 
+    // 根据子问题,去意图节点找分数前 MAX_INTENT_COUNT 个对应意图节点
     private List<NodeScore> classifyIntents(String question) {
         List<NodeScore> scores = intentClassifier.classifyTargets(question);
         return scores.stream()

@@ -196,6 +196,12 @@ public class RetrievalEngine {
         return contextFormatter.formatMcpContext(toolResults, mcpIntents);
     }
 
+    /**
+     * 单个子问题多通道 KB 检索
+     * @param intent 子问题及其意图节点列表
+     * @param kbIntents 过滤后的意图节点列表
+     * @return KB 检索结果
+     */
     private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
         // 使用多通道检索引擎（是否启用全局检索由置信度阈值决定）
         List<SubQuestionIntent> subIntents = List.of(intent);

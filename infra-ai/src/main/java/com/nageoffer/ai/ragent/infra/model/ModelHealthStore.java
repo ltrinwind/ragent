@@ -138,6 +138,11 @@ public class ModelHealthStore {
         }
     }
 
+    /**
+     * Close: 闭合断路器,放行请求
+     * Open: 打开断路器,拒绝请求
+     * HalfOpen: 只放行一个探测请求,若失败转为 Open,否则 Close
+     */
     private enum State {
         CLOSED,
         OPEN,
