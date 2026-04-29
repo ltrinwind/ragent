@@ -35,10 +35,10 @@ import java.util.regex.Pattern;
 
 /**
  * 结构感知分块器（Markdown 友好版）
- * - 绝不改写文本，只在"块"边界切分
- * - 块类型：Heading、Paragraph（空行分段）、CodeFence（```...```）、Atomic（整行 ![]()/[]()）
- * - 通过 min/target/max 预算控制 chunk 大小
- * - 支持可选的 overlap
+ * 混合递归分块策略
+ * Phase 1: 按 Markdown 结构（标题、代码块、图片、段落）识别 block 边界
+ * Phase 2: 对超大 block 内部使用递归分块策略按多级分隔符二次切分
+ * Phase 3: 贪心合并相邻小块到 targetChars，并在 chunk 间添加 overlap
  */
 @Component
 public class StructureAwareTextChunker implements ChunkingStrategy {
@@ -47,6 +47,16 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
     private static final Pattern CODE_FENCE = Pattern.compile("^```.*$");
     private static final Pattern ATOMIC_IMAGE = Pattern.compile("^!\\[[^]]*]\\([^)]+\\)(?:\\s*\"[^\"]*\")?\\s*$");
     private static final Pattern ATOMIC_LINK = Pattern.compile("^\\[[^]]+]\\([^)]+\\)\\s*$");
+
+    private static final List<String> SEPARATORS = List.of(
+            "\n\n",
+            "\n",
+            "。", "！", "？",
+            ".", "!", "?",
+            ";", "；",
+            " ",
+            ""
+    );
 
     @Override
     public ChunkingMode getType() {
@@ -57,46 +67,31 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
     public List<VectorChunk> chunk(String text, ChunkingOptions config) {
         if (StrUtil.isBlank(text)) return List.of();
 
-        // 统一行尾：Windows \r\n → \n，老 Mac \r → \n，避免 \r 残留导致空行/标题识别失败
         text = text.replace("\r\n", "\n").replace("\r", "\n");
 
         TextBoundaryOptions opts = (TextBoundaryOptions) config;
-        int effectiveTarget = opts.targetChars();
-        int effectiveMax = opts.maxChars();
-        int effectiveMin = opts.minChars();
-        int effectiveOverlap = opts.overlapChars();
+        int target = opts.targetChars();
+        int max = opts.maxChars();
+        int min = opts.minChars();
+        int overlap = opts.overlapChars();
 
-        // 1) 扫描成“块”（记录原文的 start/end 下标，确保输出 substring 完全等于原文）
+        // Phase 1: 结构化识别 block
         List<Block> blocks = segmentToBlocks(text);
-
         if (blocks.isEmpty()) {
-            VectorChunk chunk = VectorChunk.builder()
-                    .content(text)
-                    .index(0)
-                    .chunkId(IdUtil.getSnowflakeNextIdStr())
-                    .build();
-            return List.of(chunk); // 极端兜底：整体作为一个块
+            return List.of(VectorChunk.builder()
+                    .content(text).index(0).chunkId(IdUtil.getSnowflakeNextIdStr())
+                    .build());
         }
 
-        // 2) 依据 min/target/max 打包成 chunk（只在块边界切分）
-        List<int[]> ranges = packBlocksToChunks(blocks, text.length(), effectiveMin, effectiveTarget, effectiveMax);
+        // Phase 2: 遍历 block，提取原串，超限则递归二次切分
+        List<String> segments = splitBlocksRecursive(blocks, text, target, max);
 
-        // 3)（可选）加入重叠：为保持“只在块边界切分”，这里不在中间加重叠，若开启 overlap，仅复制“上一 chunk 的尾部全文子串”到下一 chunk 的开头
-        List<VectorChunk> out = materialize(text, ranges, effectiveOverlap);
-
-        // 编号从 0 递增
-        for (int i = 0; i < out.size(); i++) {
-            VectorChunk chunk = VectorChunk.builder()
-                    .content(out.get(i).getContent())
-                    .index(i)
-                    .chunkId(IdUtil.getSnowflakeNextIdStr())
-                    .build();
-            out.set(i, chunk);
-        }
-        return out;
+        // Phase 3: 贪心合并 + overlap，构建最终 VectorChunk
+        return mergeAndBuildChunks(segments, target, min, max, overlap);
     }
 
-    // ----------- 块模型 -----------
+    // ==================== Phase 1: 结构化识别（不变） ====================
+
     @Getter
     @ToString
     @AllArgsConstructor
@@ -104,11 +99,15 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
         enum Kind {HEADING, CODE, ATOMIC, PARA}
 
         final Block.Kind kind;
-        final int start;   // 在原文中的起始（含）
-        final int end;     // 在原文中的结束（不含）
+        final int start;
+        final int end;
     }
 
-    // ----------- 1) 线性扫描生成块 -----------
+    /**
+     * Phase 1: 线性扫描原文，按 Markdown 语法边界将文本拆分为结构化 block
+     * 识别标题（#{1,6}）、代码围栏（```...```）、原子行（图片/链接）、普通段落四种类型，
+     * 每个 block 记录在原文中的 [start, end) 下标，不修改原文内容
+     */
     private List<Block> segmentToBlocks(String text) {
         List<Block> blocks = new ArrayList<>();
         int n = text.length();
@@ -122,19 +121,15 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
 
         while (pos < n) {
             int lineEnd = indexOfNl(text, pos);
-            // [pos, lineEnd) 不含换行字符；lineEndNl = 包含换行（若有）
             int lineEndNl = lineEnd < n && text.charAt(lineEnd) == '\n' ? lineEnd + 1 : lineEnd;
             String line = text.substring(pos, lineEnd);
-
-            String trimmed = trimRightKeepLeft(line); // 不改左侧空白，保留原貌；右侧空白不影响判断
+            String trimmed = trimRightKeepLeft(line);
 
             if (!inFence && CODE_FENCE.matcher(trimmed).matches()) {
-                // 先把正在积累的段落收尾
                 if (inPara) {
                     blocks.add(new Block(Block.Kind.PARA, paraStart, pos));
                     inPara = false;
                 }
-                // 进入代码围栏
                 inFence = true;
                 fenceStart = pos;
                 pos = lineEndNl;
@@ -142,9 +137,7 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
             }
 
             if (inFence) {
-                // 直到遇到 fence 结束行
                 if (CODE_FENCE.matcher(trimmed).matches()) {
-                    // 包含结束 fence 行
                     blocks.add(new Block(Block.Kind.CODE, fenceStart, lineEndNl));
                     inFence = false;
                 }
@@ -152,18 +145,15 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
                 continue;
             }
 
-            // 空行 => 段落边界
             if (trimmed.isEmpty()) {
                 if (inPara) {
                     blocks.add(new Block(Block.Kind.PARA, paraStart, pos));
                     inPara = false;
                 }
-                // 空行本身并入前一块或下一块？——保持原貌：把空行并入前一块（若无前一块，则作为 0 长度过渡）
                 pos = lineEndNl;
                 continue;
             }
 
-            // 标题/原子行（图片/链接）都作为独立块
             if (HEADING.matcher(trimmed).matches()) {
                 if (inPara) {
                     blocks.add(new Block(Block.Kind.PARA, paraStart, pos));
@@ -183,7 +173,6 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
                 continue;
             }
 
-            // 其他：并入当前段落
             if (!inPara) {
                 inPara = true;
                 paraStart = pos;
@@ -191,9 +180,7 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
             pos = lineEndNl;
         }
 
-        // 收尾
         if (inFence) {
-            // 未闭合 fence：将剩余部分作为 CODE（保持原样）
             blocks.add(new Block(Block.Kind.CODE, fenceStart, n));
         } else if (inPara) {
             blocks.add(new Block(Block.Kind.PARA, paraStart, n));
@@ -201,7 +188,10 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
         return coalesceTrailingBlanks(blocks, text);
     }
 
-    // 合并“块尾部的若干空行”到块内部，避免单独产生空白块（保持原文不变，只是归属到前块）
+    /**
+     * 合并相邻 block 之间的纯空白区域到前一个 block 内部，
+     * 避免单独产生空白 block，同时保持原文内容不变
+     */
     private List<Block> coalesceTrailingBlanks(List<Block> blocks, String text) {
         if (blocks.isEmpty()) return blocks;
         List<Block> out = new ArrayList<>();
@@ -209,10 +199,8 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
         for (int i = 1; i < blocks.size(); i++) {
             Block cur = blocks.get(i);
             if (isAllBlank(text, prev.end, cur.start)) {
-                // 把中间空白并入 prev，但别丢掉 cur
                 prev = new Block(prev.kind, prev.start, cur.start);
             }
-            // 无论是否并入空白，prev 都该进结果，然后向前推进
             out.add(prev);
             prev = cur;
         }
@@ -220,89 +208,212 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
         return out;
     }
 
-    // ----------- 2) 打包成 chunk（仅在块边界切） -----------
-    private List<int[]> packBlocksToChunks(List<Block> blocks, int textLen, int min, int target, int max) {
-        List<int[]> ranges = new ArrayList<>();
-        int i = 0;
-        while (i < blocks.size()) {
-            int chunkStart = blocks.get(i).start;
-            int chunkEnd = blocks.get(i).end; // 不含
-            int size = chunkEnd - chunkStart;
+    // ==================== Phase 2: block → 递归分块 ====================
 
-            int j = i + 1;
-            while (j < blocks.size()) {
-                Block b = blocks.get(j);
-                int afterAdd = (b.end - chunkStart); // 等同于 size + nextSize + 中间空白（已包含）
-
-                if (afterAdd <= max) {
-                    // 还能加
-                    chunkEnd = b.end;
-                    size = afterAdd;
-                    j++;
-                } else {
-                    // 超过 max：若当前 size < min，则“忍一次超限”，把这个块也吸进去（保证不要太小）
-                    if (size < min) {
-                        chunkEnd = b.end;
-                        size = afterAdd;
-                        j++;
-                    }
-                    break;
-                }
+    /**
+     * 遍历每个 block，提取原文子串：
+     * - 不超 target 的 block 直接作为一个 segment
+     * - 超过 target 的 block 调用递归分块拆成多个 segment
+     * - HEADING/CODE/ATOMIC 类型保持完整，不拆分（即使超限也作为整体）
+     */
+    private List<String> splitBlocksRecursive(List<Block> blocks, String text, int target, int max) {
+        List<String> segments = new ArrayList<>();
+        for (Block block : blocks) {
+            String content = text.substring(block.start, block.end);
+            // 结构性 block（标题、代码块、原子元素）保持完整
+            if (block.kind != Block.Kind.PARA || content.length() <= target) {
+                segments.add(content);
+                continue;
             }
-
-            ranges.add(new int[]{chunkStart, chunkEnd});
-            i = j;
+            // PARA 超限：递归二次切分（超过 max 时用 max 作为目标大小兜底）
+            int effectiveTarget = Math.min(content.length(), max);
+            effectiveTarget = Math.min(effectiveTarget, target);
+            segments.addAll(recursiveSplit(content, SEPARATORS, 0, effectiveTarget));
         }
-
-        // 若最后一个 chunk 明显过小，尝试与前一个合并（仍不跨越 max 过多）
-        if (ranges.size() >= 2) {
-            int[] last = ranges.get(ranges.size() - 1);
-            if (last[1] - last[0] < Math.min(min, target / 2)) {
-                int[] prev = ranges.get(ranges.size() - 2);
-                if (last[1] - prev[0] <= max * 2) { // 放宽一下，尽量合并到可接受大小
-                    prev[1] = last[1];
-                    ranges.remove(ranges.size() - 1);
-                }
-            }
-        }
-        return ranges;
+        return segments;
     }
 
-    // ----------- 3) 物化为 Chunk，必要时追加 overlap（复制原文尾部） -----------
-    private List<VectorChunk> materialize(String text, List<int[]> ranges, int overlap) {
-        if (ranges.isEmpty()) return List.of();
-        List<VectorChunk> out = new ArrayList<>();
+    /**
+     * 递归切分：用 separators[sepIndex] 切文本，超限段降级到下一级分隔符
+     */
+    private List<String> recursiveSplit(String text, List<String> separators, int sepIndex, int target) {
+        if (text.length() <= target) {
+            return List.of(text);
+        }
+        if (sepIndex >= separators.size()) {
+            return hardSplit(text, target);
+        }
+
+        String separator = separators.get(sepIndex);
+        if (separator.isEmpty()) {
+            return hardSplit(text, target);
+        }
+
+        List<String> parts = splitBySeparator(text, separator);
+        if (parts.size() <= 1) {
+            return recursiveSplit(text, separators, sepIndex + 1, target);
+        }
+
+        List<String> result = new ArrayList<>();
+        for (String part : parts) {
+            if (part.length() <= target) {
+                result.add(part);
+            } else {
+                result.addAll(recursiveSplit(part, separators, sepIndex + 1, target));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 按指定分隔符切分文本，分隔符保留在前面片段的尾部（而非丢弃）
+     * 例如 "a\nb\nc" 用 "\n" 切分得到 ["a\n", "b\n", "c"]
+     */
+    private List<String> splitBySeparator(String text, String separator) {
+        List<String> parts = new ArrayList<>();
+        int idx = 0;
+        while (idx < text.length()) {
+            int next = text.indexOf(separator, idx);
+            if (next < 0) {
+                parts.add(text.substring(idx));
+                break;
+            }
+            int end = next + separator.length();
+            parts.add(text.substring(idx, end));
+            idx = end;
+        }
+        return parts;
+    }
+
+    /**
+     * 兜底硬切分：当所有分隔符都无法拆分时，按 chunkSize 强制截断，
+     * 在截断点附近尝试对齐到换行或句末标点，找不到则直接在 chunkSize 处切断
+     */
+    private List<String> hardSplit(String text, int chunkSize) {
+        List<String> result = new ArrayList<>();
+        int start = 0;
+        while (start < text.length()) {
+            int end = Math.min(start + chunkSize, text.length());
+            if (end < text.length()) {
+                end = findBoundary(text, start, end);
+            }
+            result.add(text.substring(start, end));
+            start = end;
+        }
+        return result;
+    }
+
+    /**
+     * 在 [targetEnd - lookBack, targetEnd] 范围内向左搜索换行符或句末标点作为截断边界，
+     * lookBack 取 targetEnd / 4，在"尽量对齐"和"不会回退太远"之间取平衡
+     */
+    private int findBoundary(String text, int start, int targetEnd) {
+        int lookBack = Math.min(targetEnd - start, targetEnd / 4);
+        for (int i = 0; i <= lookBack; i++) {
+            int pos = targetEnd - i - 1;
+            if (pos <= start) break;
+            char c = text.charAt(pos);
+            if (c == '\n' || c == '。' || c == '！' || c == '？' || c == '；') {
+                return pos + 1;
+            }
+            if (c == '.' || c == '!' || c == '?' || c == ';') {
+                int next = pos + 1;
+                if (next >= text.length() || Character.isWhitespace(text.charAt(next))) {
+                    return next;
+                }
+            }
+        }
+        return targetEnd;
+    }
+
+    // ==================== Phase 3: 贪心合并 + overlap ====================
+
+    /**
+     * 将 segments 贪心合并为最终 chunk：
+     * - 相邻 segment 总量 <= target 时合并
+     * - 超过 max 时强制切割
+     * - 合并后不足 min 的尝试与下一轮合并
+     * - chunk 间通过复制前一个 chunk 尾部 overlap 字符实现重叠
+     */
+    private List<VectorChunk> mergeAndBuildChunks(List<String> segments, int target, int min, int max, int overlap) {
+        if (segments.isEmpty()) return List.of();
+
+        List<VectorChunk> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
         String prevTail = null;
+        int index = 0;
 
-        for (int k = 0; k < ranges.size(); k++) {
-            int s = ranges.get(k)[0];
-            int e = ranges.get(k)[1];
-            String body = text.substring(s, e);
-            if (overlap > 0 && prevTail != null && !prevTail.isEmpty()) {
-                body = prevTail + body;
+        for (String seg : segments) {
+            int currentLen = current.length();
+            int mergedLen = currentLen + seg.length();
+
+            // 当前块非空，且加入这个 segment 后超过 target → 先提交当前块
+            if (currentLen > 0 && mergedLen > target) {
+                // 太小的不提交，继续攒
+                if (currentLen >= min) {
+                    chunks.add(buildChunk(current.toString(), prevTail, overlap, index++));
+                    prevTail = tailByChars(current.toString(), overlap);
+                    current.setLength(0);
+                }
             }
 
-            VectorChunk chunk = VectorChunk.builder()
-                    .content(body)
-                    .index(k)
-                    .chunkId(IdUtil.getSnowflakeNextIdStr())
-                    .build();
-            out.add(chunk);
+            // 加入这个 segment 后超过 max → 强制提交（即使不足 min）
+            if (!current.isEmpty() && current.length() + seg.length() > max) {
+                chunks.add(buildChunk(current.toString(), prevTail, overlap, index++));
+                prevTail = tailByChars(current.toString(), overlap);
+                current.setLength(0);
+            }
 
-            // 计算下一块的 overlap 尾部（完全来自本 chunk 原文结尾）
-            if (overlap > 0) {
-                prevTail = tailByChars(text.substring(s, e), overlap);
+            current.append(seg);
+        }
+
+        // 处理剩余内容
+        if (!current.isEmpty() && StrUtil.isNotBlank(current.toString().strip())) {
+            // 最后一个 chunk 太小时尝试与前一个合并
+            if (current.length() < min && !chunks.isEmpty()) {
+                VectorChunk last = chunks.remove(chunks.size() - 1);
+                String merged = last.getContent() + current;
+                chunks.add(VectorChunk.builder()
+                        .chunkId(last.getChunkId())
+                        .index(last.getIndex())
+                        .content(merged)
+                        .build());
+            } else {
+                chunks.add(buildChunk(current.toString(), prevTail, overlap, index));
             }
         }
-        return out;
+
+        return chunks;
     }
 
-    // ----------- 小工具 -----------
+    /**
+     * 构建单个 VectorChunk：将前一个 chunk 的尾部 overlap 字符拼接到当前内容开头，
+     * 实现相邻 chunk 之间的上下文重叠
+     */
+    private VectorChunk buildChunk(String content, String prevTail, int overlap, int index) {
+        String finalContent = (overlap > 0 && prevTail != null && !prevTail.isEmpty())
+                ? prevTail + content
+                : content;
+        return VectorChunk.builder()
+                .chunkId(IdUtil.getSnowflakeNextIdStr())
+                .index(index)
+                .content(finalContent)
+                .build();
+    }
+
+    // ==================== 工具方法 ====================
+
+    /**
+     * 从 from 位置开始查找下一个换行符下标，找不到则返回字符串长度
+     */
     private int indexOfNl(String s, int from) {
         int p = s.indexOf('\n', from);
         return p < 0 ? s.length() : p;
     }
 
+    /**
+     * 去除行尾空白（空格/制表），但保留左侧缩进和换行符，用于标题/代码围栏的正则匹配
+     */
     private String trimRightKeepLeft(String s) {
         int r = s.length();
         while (r > 0 && Character.isWhitespace(s.charAt(r - 1)) && s.charAt(r - 1) != '\n' && s.charAt(r - 1) != '\r') {
@@ -311,6 +422,9 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
         return s.substring(0, r);
     }
 
+    /**
+     * 判断原文 [from, to) 区间是否全部为空白字符（空格/制表/回车/换行）
+     */
     private boolean isAllBlank(String s, int from, int to) {
         for (int i = from; i < to; i++) {
             char c = s.charAt(i);
@@ -319,6 +433,9 @@ public class StructureAwareTextChunker implements ChunkingStrategy {
         return true;
     }
 
+    /**
+     * 截取字符串末尾 n 个字符，用于实现相邻 chunk 之间的 overlap 重叠
+     */
     private String tailByChars(String s, int n) {
         if (n <= 0) return "";
         int len = s.length();
