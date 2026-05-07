@@ -51,6 +51,16 @@ public class SearchChannelProperties {
          * 意图定向检索配置
          */
         private IntentDirected intentDirected = new IntentDirected();
+
+        /**
+         * BM25 关键词检索配置
+         */
+        private KeywordBm25 keywordBm25 = new KeywordBm25();
+
+        /**
+         * RRF 融合配置
+         */
+        private Rrf rrf = new Rrf();
     }
 
     @Data
@@ -98,5 +108,40 @@ public class SearchChannelProperties {
          * TopK 倍数
          */
         private int topKMultiplier = 2;
+    }
+
+    @Data
+    public static class KeywordBm25 {
+
+        /**
+         * 是否启用 BM25 关键词检索通道
+         */
+        private boolean enabled = true;
+
+        /**
+         * TopK 倍数
+         */
+        private int topKMultiplier = 3;
+
+        /**
+         * PostgreSQL 全文检索配置名
+         * 需与数据库中 tsvector 列使用的配置一致
+         */
+        private String tsvectorConfig = "simple_zh";
+    }
+
+    @Data
+    public static class Rrf {
+
+        /**
+         * 是否启用 RRF 融合
+         */
+        private boolean enabled = true;
+
+        /**
+         * RRF 常数 k
+         * 值越大，低排名结果的影响越小
+         */
+        private int k = 60;
     }
 }
