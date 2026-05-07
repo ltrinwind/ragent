@@ -37,7 +37,7 @@ public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
      * @return 包含 id, content, score 的 Map 列表
      */
     @Select("<script>" +
-            "SELECT id, content, ts_rank_cd(tsv, query) AS score " +
+            "SELECT id, kb_id, doc_id, content, ts_rank_cd(tsv, query) AS score " +
             "FROM t_knowledge_chunk, plainto_tsquery(#{config}, #{query}) query " +
             "WHERE tsv @@ query " +
             "AND enabled = 1 AND deleted = 0 " +
