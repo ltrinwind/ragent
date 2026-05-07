@@ -194,6 +194,14 @@ ALTER TABLE t_knowledge_chunk ADD COLUMN IF NOT EXISTS parent_id VARCHAR(20) NUL
 CREATE INDEX IF NOT EXISTS idx_chunk_parent_id ON t_knowledge_chunk (parent_id);
 COMMENT ON COLUMN t_knowledge_chunk.parent_id IS '父块ID（父子分块模式）';
 
+-- BM25 全文检索：自动生成 tsvector 列 + GIN 索引（需先安装 zhparser 扩展）
+-- CREATE EXTENSION IF NOT EXISTS zhparser;
+-- CREATE TEXT SEARCH CONFIGURATION simple_zh (PARSER = zhparser) WITH (MAPPING = ngram);
+ALTER TABLE t_knowledge_chunk ADD COLUMN IF NOT EXISTS tsv tsvector
+    GENERATED ALWAYS AS (to_tsvector('simple_zh', coalesce(content, ''))) STORED;
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunk_tsv ON t_knowledge_chunk USING GIN (tsv);
+COMMENT ON COLUMN t_knowledge_chunk.tsv IS '全文检索预分词列（由 content 自动生成）';
+
 CREATE TABLE t_knowledge_document_chunk_log (
     id                 VARCHAR(20)      NOT NULL PRIMARY KEY,
     doc_id             VARCHAR(20)      NOT NULL,
