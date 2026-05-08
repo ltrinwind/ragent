@@ -116,29 +116,32 @@ public class KeywordSearchChannel implements SearchChannel {
     }
 
     /**
+     * 提取 KB 意图（不做最低分数过滤，BM25 关键词匹配对所有意图分数均有效）
+     */
+    private List<NodeScore> extractKbIntents(SearchContext context) {
+        if (CollUtil.isEmpty(context.getIntents())) {
+            return List.of();
+        }
+        List<NodeScore> allScores = context.getIntents().stream()
+                .flatMap(si -> si.nodeScores().stream())
+                .toList();
+        return NodeScoreFilters.kb(allScores);
+    }
+
+    /**
      * 从意图结果中提取 kbId 列表。
      * 有意图时限定知识库范围，无意图时返回 null 触发全局搜索。
      */
     private List<String> resolveKbIds(SearchContext context) {
-        if (CollUtil.isEmpty(context.getIntents())) {
-            return null;
-        }
-
-        List<NodeScore> allScores = context.getIntents().stream()
-                .flatMap(si -> si.nodeScores().stream())
-                .toList();
-
-        List<NodeScore> kbIntents = NodeScoreFilters.kb(allScores);
+        List<NodeScore> kbIntents = extractKbIntents(context);
         if (CollUtil.isEmpty(kbIntents)) {
             return null;
         }
-
         List<String> kbIds = kbIntents.stream()
                 .map(ns -> ns.getNode().getKbId())
                 .filter(id -> id != null && !id.isBlank())
                 .distinct()
                 .toList();
-
         return kbIds.isEmpty() ? null : kbIds;
     }
 }
