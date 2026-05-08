@@ -38,7 +38,7 @@ public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkDO> {
      */
     @Select("<script>" +
             "SELECT id, kb_id, doc_id, content, ts_rank_cd(tsv, query) AS score " +
-            "FROM t_knowledge_chunk, plainto_tsquery(#{config}, #{query}) query " +
+            "FROM t_knowledge_chunk, plainto_tsquery('${config}'::regconfig, #{query}::text) query " +
             "WHERE tsv @@ query " +
             "AND enabled = 1 AND deleted = 0 " +
             "<if test='kbIds != null and kbIds.size() > 0'>" +
