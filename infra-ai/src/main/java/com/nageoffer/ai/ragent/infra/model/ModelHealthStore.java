@@ -37,6 +37,9 @@ public class ModelHealthStore {
 
     private final Map<String, ModelHealth> healthById = new ConcurrentHashMap<>();
 
+    /**
+     * 判断模型是否不可用,初始时都是 false,即表示可用
+     */
     public boolean isUnavailable(String id) {
         ModelHealth health = healthById.get(id);
         if (health == null) {

@@ -148,6 +148,9 @@ public abstract class AbstractOpenAIStyleChatClient implements ChatClient {
         );
     }
 
+    /**
+     * 流式读取,读取一行解析
+     */
     private void doStream(Call call, StreamCallback callback, AtomicBoolean cancelled, boolean reasoningEnabled) {
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) {

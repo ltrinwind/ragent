@@ -116,6 +116,9 @@ public class StreamChatPipeline {
         ctx.setSubIntents(subIntents);
     }
 
+    /**
+     * 歧义引导,SSE 推送引导选项等用户选择,短路后续流程
+     */
     private boolean handleGuidance(StreamChatContext ctx) {
         GuidanceDecision decision = guidanceService.detectAmbiguity(
                 ctx.getRewriteResult().rewrittenQuestion(),
@@ -130,6 +133,9 @@ public class StreamChatPipeline {
         return true;
     }
 
+    /**
+     * 只存在 System 意图节点,不需要检索,直接回答,短路后续流程
+     */
     private boolean handleSystemOnly(StreamChatContext ctx) {
         List<SubQuestionIntent> subIntents = ctx.getSubIntents();
         boolean allSystemOnly = subIntents.stream()

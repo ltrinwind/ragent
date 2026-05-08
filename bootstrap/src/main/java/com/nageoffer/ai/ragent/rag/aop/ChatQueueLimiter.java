@@ -62,6 +62,9 @@ import java.util.function.IntSupplier;
 
 /**
  * SSE 全局并发限流与排队处理
+ * ZSET 对比 LIST 的优势：
+ * 1. 按值删除（SSE 断开时移除自己）— ZSET O(log n) vs LIST O(n)
+ * 2. 按值查排名（判断是否能够去获取许可）— ZSET O(log n) vs LIST 需要遍历 O(n)
  */
 @Slf4j
 @Component
@@ -143,6 +146,10 @@ public class ChatQueueLimiter {
         scheduleQueuePoll(queue, requestId, permitRef, cancelled, question, conversationId, userId, emitter, onAcquire);
     }
 
+    /**
+     * 定时轮询获取许可,若超时获取失败,则拒绝
+     * 定时任务是为了避免 redis pub/sub 通知会丢的情况,属于是兜底保障
+     */
     private void scheduleQueuePoll(RScoredSortedSet<String> queue,
                                    String requestId,
                                    AtomicReference<String> permitRef,
@@ -158,6 +165,7 @@ public class ChatQueueLimiter {
         ScheduledFuture<?>[] futureRef = new ScheduledFuture<?>[1];
 
         Runnable poller = () -> {
+            // SSE 已断开,注销任务
             if (cancelled.get()) {
                 if (notifier != null) {
                     notifier.unregister(requestId);
@@ -165,6 +173,7 @@ public class ChatQueueLimiter {
                 cancelFuture(futureRef[0]);
                 return;
             }
+            // 超时,拒绝对话,退出
             if (System.currentTimeMillis() > deadline) {
                 queue.remove(requestId);
                 publishQueueNotify();
@@ -178,6 +187,7 @@ public class ChatQueueLimiter {
                 }
                 return;
             }
+            // 获取许可成功
             if (tryAcquireIfReady(queue, requestId, permitRef, cancelled, onAcquire)) {
                 if (notifier != null) {
                     notifier.unregister(requestId);
@@ -186,12 +196,18 @@ public class ChatQueueLimiter {
             }
         };
 
+        // 注册到定时任务
         futureRef[0] = scheduler.scheduleAtFixedRate(poller, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
+
+        // 注册到 redis pub/sub 通知,减少轮询时延
         if (notifier != null) {
             notifier.register(requestId, poller);
         }
     }
 
+    /**
+     * 尝试获取许可
+     */
     private boolean tryAcquireIfReady(RScoredSortedSet<String> queue,
                                       String requestId,
                                       AtomicReference<String> permitRef,
@@ -209,6 +225,7 @@ public class ChatQueueLimiter {
             return false;
         }
         String permitId = tryAcquirePermit();
+        // 因为不是在 lua 脚本获取信号量,因此存在竞态,这个就是处理 claim 成功,但是获取许可失败的情况
         if (permitId == null) {
             long newSeq = nextQueueSeq();
             queue.add(newSeq, requestId);
@@ -257,6 +274,9 @@ public class ChatQueueLimiter {
         return semaphore.availablePermits();
     }
 
+    /**
+     * 执行 Lua 脚本,只有队首且还有信号量时,才能获取成功
+     */
     private ClaimResult claimIfReady(RScoredSortedSet<String> queue, String requestId, int availablePermits) {
         RScript script = redissonClient.getScript(StringCodec.INSTANCE);
         List<Object> result = script.eval(

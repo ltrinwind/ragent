@@ -253,12 +253,15 @@ public class JdbcConversationMemorySummaryService implements ConversationMemoryS
         return conversationGroupService.findMaxMessageIdAtOrBefore(conversationId, userId, after);
     }
 
+    /**
+     * 摘要生成的截至消息 id
+     */
     private String resolveCutoffId(List<ConversationMessageDO> latestUserTurns) {
         if (CollUtil.isEmpty(latestUserTurns)) {
             return null;
         }
 
-        // 倒序列表的最后一个就是最早的
+        // 拿到倒序列表的最后一个消息,也就是用于生成摘要的截至消息 id
         ConversationMessageDO oldest = latestUserTurns.get(latestUserTurns.size() - 1);
         return oldest == null ? null : oldest.getId();
     }

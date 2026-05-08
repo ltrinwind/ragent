@@ -95,6 +95,10 @@ public class RoutingLLMService implements LLMService {
         );
     }
 
+    /**
+     * chatClient 的 SSE 实现(streamChat 方法),是直接丢给线程池就返回的,而上面的 chat 是同步调用
+     * 因此在这里不能因为 streamChat 方法返回就认为成功了,而是需要通过 CF 的 超时等待去判断
+     */
     @Override
     @RagTraceNode(name = "llm-stream-routing", type = "LLM_ROUTING")
     public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback) {

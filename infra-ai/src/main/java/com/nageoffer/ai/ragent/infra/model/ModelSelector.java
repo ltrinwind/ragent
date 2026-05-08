@@ -113,6 +113,10 @@ public class ModelSelector {
         return enabled;
     }
 
+
+    /**
+     * 绑定 model 以及对应的 provider
+     */
     private List<ModelTarget> buildAvailableTargets(List<AIModelProperties.ModelCandidate> candidates) {
         Map<String, AIModelProperties.ProviderConfig> providers = properties.getProviders();
 
@@ -122,6 +126,9 @@ public class ModelSelector {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 过滤熔断中的模型
+     */
     private ModelTarget buildModelTarget(AIModelProperties.ModelCandidate candidate, Map<String, AIModelProperties.ProviderConfig> providers) {
         String modelId = resolveId(candidate);
 

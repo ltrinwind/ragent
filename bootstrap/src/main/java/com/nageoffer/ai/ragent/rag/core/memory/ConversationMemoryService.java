@@ -28,7 +28,7 @@ import java.util.List;
 public interface ConversationMemoryService {
 
     /**
-     * 加载对话历史记录
+     * 加载对话历史记录和最新摘要
      *
      * @param conversationId 对话ID
      * @param userId         用户ID
@@ -37,7 +37,7 @@ public interface ConversationMemoryService {
     List<ChatMessage> load(String conversationId, String userId);
 
     /**
-     * 追加消息到对话历史
+     * 追加消息到对话历史(插入数据库),以及必要时异步生成摘要
      *
      * @param conversationId 对话ID
      * @param userId         用户ID
