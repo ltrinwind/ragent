@@ -104,6 +104,8 @@ const formatChunkStrategy = (strategy?: string | null) => {
   const normalized = strategy?.toLowerCase();
   if (normalized === "fixed_size") return "固定大小";
   if (normalized === "structure_aware") return "语义感知（Markdown友好）";
+  if (normalized === "recursive") return "递归分块";
+  if (normalized === "parent_child") return "父子分块";
   return strategy || "-";
 };
 
@@ -976,7 +978,9 @@ const uploadSchema = z
     targetChars: z.string().optional(),
     maxChars: z.string().optional(),
     minChars: z.string().optional(),
-    overlapChars: z.string().optional()
+    overlapChars: z.string().optional(),
+    parentChunkSize: z.string().optional(),
+    childChunkSize: z.string().optional()
   })
   .superRefine((values, ctx) => {
     const isBlank = (value?: string) => !value || value.trim() === "";
@@ -1022,14 +1026,18 @@ const uploadSchema = z
         });
         return;
       }
-      if (values.chunkStrategy === "fixed_size") {
+      if (values.chunkStrategy === "fixed_size" || values.chunkStrategy === "recursive") {
         requireNumber(values.chunkSize, "chunkSize", "块大小");
         requireNumber(values.overlapSize, "overlapSize", "重叠大小");
-      } else {
+      } else if (values.chunkStrategy === "structure_aware") {
         requireNumber(values.targetChars, "targetChars", "理想块大小");
         requireNumber(values.maxChars, "maxChars", "块上限");
         requireNumber(values.minChars, "minChars", "块下限");
         requireNumber(values.overlapChars, "overlapChars", "重叠大小");
+      } else if (values.chunkStrategy === "parent_child") {
+        requireNumber(values.parentChunkSize, "parentChunkSize", "父块大小");
+        requireNumber(values.childChunkSize, "childChunkSize", "子块大小");
+        requireNumber(values.overlapSize, "overlapSize", "重叠大小");
       }
     } else if (values.processMode === "pipeline") {
       if (isBlank(values.pipelineId)) {
@@ -1071,7 +1079,9 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
       targetChars: "1400",
       maxChars: "1800",
       minChars: "600",
-      overlapChars: "0"
+      overlapChars: "0",
+      parentChunkSize: "2000",
+      childChunkSize: "500"
     }
   });
 
@@ -1084,6 +1094,9 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
   const isChunkMode = processMode === "chunk";
   const isPipelineMode = processMode === "pipeline";
   const isFixedSize = chunkStrategy === "fixed_size";
+  const isRecursive = chunkStrategy === "recursive";
+  const isStructureAware = chunkStrategy === "structure_aware";
+  const isParentChild = chunkStrategy === "parent_child";
 
   const loadPipelines = async () => {
     setLoadingPipelines(true);
@@ -1114,7 +1127,9 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
         targetChars: "1400",
         maxChars: "1800",
         minChars: "600",
-        overlapChars: "0"
+        overlapChars: "0",
+        parentChunkSize: "2000",
+        childChunkSize: "500"
       });
       setNoChunk(false);
       setOriginalChunkSize("512");
@@ -1143,7 +1158,9 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
       targetChars: (v) => form.setValue("targetChars", v),
       maxChars: (v) => form.setValue("maxChars", v),
       minChars: (v) => form.setValue("minChars", v),
-      overlapChars: (v) => form.setValue("overlapChars", v)
+      overlapChars: (v) => form.setValue("overlapChars", v),
+      parentChunkSize: (v) => form.setValue("parentChunkSize", v),
+      childChunkSize: (v) => form.setValue("childChunkSize", v)
     };
     for (const key of Object.keys(strategy.defaultConfig)) {
       if (defaults[key] !== undefined && formAccessors[key]) {
@@ -1204,7 +1221,9 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
           targetChars: values.targetChars,
           maxChars: values.maxChars,
           minChars: values.minChars,
-          overlapChars: values.overlapChars
+          overlapChars: values.overlapChars,
+          parentChunkSize: values.parentChunkSize,
+          childChunkSize: values.childChunkSize
         };
         const config: Record<string, number> = {};
         for (const key of Object.keys(strategy.defaultConfig)) {
@@ -1475,35 +1494,35 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
                     )}
                   />
 
-              {isFixedSize ? (
-                <>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <FormField
-                      control={form.control}
-                      name="chunkSize"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs text-muted-foreground font-normal">块大小</FormLabel>
-                          <FormControl>
-                            <Input type="number" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="overlapSize"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-xs text-muted-foreground font-normal">重叠大小</FormLabel>
-                          <FormControl>
-                            <Input type="number" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+              {isFixedSize || isRecursive ? (
+                <div className={`grid gap-4 ${isFixedSize ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+                  <FormField
+                    control={form.control}
+                    name="chunkSize"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground font-normal">块大小</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="overlapSize"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground font-normal">重叠大小</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {isFixedSize && (
                     <FormItem>
                       <FormLabel className="text-xs text-muted-foreground font-normal">不分块</FormLabel>
                       <FormControl>
@@ -1529,8 +1548,50 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
                       </FormControl>
                       <FormDescription>开启后块大小为-1</FormDescription>
                     </FormItem>
-                  </div>
-                </>
+                  )}
+                </div>
+              ) : isParentChild ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <FormField
+                    control={form.control}
+                    name="parentChunkSize"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground font-normal">父块大小</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="childChunkSize"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground font-normal">子块大小</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="overlapSize"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground font-normal">重叠大小</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField

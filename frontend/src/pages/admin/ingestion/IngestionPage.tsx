@@ -165,7 +165,12 @@ interface PipelineNodeForm {
     strategy: string;
     chunkSize: string;
     overlapSize: string;
-    separator: string;
+    targetChars: string;
+    maxChars: string;
+    minChars: string;
+    overlapChars: string;
+    parentChunkSize: string;
+    childChunkSize: string;
   };
   enhancer: {
     modelId: string;
@@ -730,7 +735,12 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
       strategy: "structure_aware",
       chunkSize: "",
       overlapSize: "",
-      separator: ""
+      targetChars: "",
+      maxChars: "",
+      minChars: "",
+      overlapChars: "",
+      parentChunkSize: "",
+      childChunkSize: ""
     },
     enhancer: {
       modelId: "",
@@ -780,7 +790,12 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
         strategy: String((settings as { strategy?: string }).strategy || "structure_aware"),
         chunkSize: settings.chunkSize != null ? String(settings.chunkSize) : "",
         overlapSize: settings.overlapSize != null ? String(settings.overlapSize) : "",
-        separator: String((settings as { separator?: string }).separator || "")
+        targetChars: (settings as { targetChars?: unknown }).targetChars != null ? String((settings as { targetChars?: unknown }).targetChars) : "",
+        maxChars: (settings as { maxChars?: unknown }).maxChars != null ? String((settings as { maxChars?: unknown }).maxChars) : "",
+        minChars: (settings as { minChars?: unknown }).minChars != null ? String((settings as { minChars?: unknown }).minChars) : "",
+        overlapChars: (settings as { overlapChars?: unknown }).overlapChars != null ? String((settings as { overlapChars?: unknown }).overlapChars) : "",
+        parentChunkSize: (settings as { parentChunkSize?: unknown }).parentChunkSize != null ? String((settings as { parentChunkSize?: unknown }).parentChunkSize) : "",
+        childChunkSize: (settings as { childChunkSize?: unknown }).childChunkSize != null ? String((settings as { childChunkSize?: unknown }).childChunkSize) : ""
       },
       enhancer: {
         modelId: String((settings as { modelId?: string }).modelId || ""),
@@ -839,22 +854,38 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
         if (!node.chunker.strategy) {
           throw new Error("分块节点需要选择 strategy");
         }
-        const chunkSize = node.chunker.chunkSize.trim();
-        const overlapSize = node.chunker.overlapSize.trim();
-        const chunkSizeValue = chunkSize ? Number(chunkSize) : undefined;
-        const overlapSizeValue = overlapSize ? Number(overlapSize) : undefined;
-        if (chunkSizeValue !== undefined && Number.isNaN(chunkSizeValue)) {
-          throw new Error("chunkSize 必须是数字");
-        }
-        if (overlapSizeValue !== undefined && Number.isNaN(overlapSizeValue)) {
-          throw new Error("overlapSize 必须是数字");
-        }
-        return {
-          strategy: node.chunker.strategy,
-          chunkSize: chunkSizeValue,
-          overlapSize: overlapSizeValue,
-          separator: node.chunker.separator.trim() || undefined
+        const parseNum = (raw: string, label: string) => {
+          const trimmed = raw.trim();
+          if (!trimmed) return undefined;
+          const num = Number(trimmed);
+          if (Number.isNaN(num)) throw new Error(`${label} 必须是数字`);
+          return num;
         };
+        const strategy = node.chunker.strategy;
+        const payload: Record<string, unknown> = { strategy };
+        if (strategy === "fixed_size" || strategy === "recursive") {
+          const chunkSizeValue = parseNum(node.chunker.chunkSize, "chunkSize");
+          const overlapSizeValue = parseNum(node.chunker.overlapSize, "overlapSize");
+          if (chunkSizeValue !== undefined) payload.chunkSize = chunkSizeValue;
+          if (overlapSizeValue !== undefined) payload.overlapSize = overlapSizeValue;
+        } else if (strategy === "structure_aware") {
+          const targetChars = parseNum(node.chunker.targetChars, "targetChars");
+          const maxChars = parseNum(node.chunker.maxChars, "maxChars");
+          const minChars = parseNum(node.chunker.minChars, "minChars");
+          const overlapChars = parseNum(node.chunker.overlapChars, "overlapChars");
+          if (targetChars !== undefined) payload.targetChars = targetChars;
+          if (maxChars !== undefined) payload.maxChars = maxChars;
+          if (minChars !== undefined) payload.minChars = minChars;
+          if (overlapChars !== undefined) payload.overlapChars = overlapChars;
+        } else if (strategy === "parent_child") {
+          const parentChunkSize = parseNum(node.chunker.parentChunkSize, "parentChunkSize");
+          const childChunkSize = parseNum(node.chunker.childChunkSize, "childChunkSize");
+          const overlapSizeValue = parseNum(node.chunker.overlapSize, "overlapSize");
+          if (parentChunkSize !== undefined) payload.parentChunkSize = parentChunkSize;
+          if (childChunkSize !== undefined) payload.childChunkSize = childChunkSize;
+          if (overlapSizeValue !== undefined) payload.overlapSize = overlapSizeValue;
+        }
+        return payload;
       }
       case "enhancer": {
         const tasks = node.enhancer.tasks
@@ -1263,56 +1294,169 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Chunk Size</label>
-                          <Input
-                            type="number"
-                            value={node.chunker.chunkSize}
-                            onChange={(event) =>
-                              setNodes((prev) =>
-                                prev.map((item) =>
-                                  item.id === node.id
-                                    ? { ...item, chunker: { ...item.chunker, chunkSize: event.target.value } }
-                                    : item
-                                )
-                              )
-                            }
-                            placeholder="例如：512"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Overlap Size</label>
-                          <Input
-                            type="number"
-                            value={node.chunker.overlapSize}
-                            onChange={(event) =>
-                              setNodes((prev) =>
-                                prev.map((item) =>
-                                  item.id === node.id
-                                    ? { ...item, chunker: { ...item.chunker, overlapSize: event.target.value } }
-                                    : item
-                                )
-                              )
-                            }
-                            placeholder="例如：128"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">自定义分隔符</label>
-                          <Input
-                            value={node.chunker.separator}
-                            onChange={(event) =>
-                              setNodes((prev) =>
-                                prev.map((item) =>
-                                  item.id === node.id
-                                    ? { ...item, chunker: { ...item.chunker, separator: event.target.value } }
-                                    : item
-                                )
-                              )
-                            }
-                            placeholder="可选"
-                          />
-                        </div>
+                        {node.chunker.strategy === "fixed_size" || node.chunker.strategy === "recursive" ? (
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">块大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.chunkSize}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, chunkSize: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：512"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">重叠大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.overlapSize}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, overlapSize: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：128"
+                              />
+                            </div>
+                          </>
+                        ) : node.chunker.strategy === "structure_aware" ? (
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">理想块大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.targetChars}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, targetChars: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：1400"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">块上限</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.maxChars}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, maxChars: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：1800"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">块下限</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.minChars}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, minChars: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：600"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">重叠大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.overlapChars}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, overlapChars: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：0"
+                              />
+                            </div>
+                          </>
+                        ) : node.chunker.strategy === "parent_child" ? (
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">父块大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.parentChunkSize}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, parentChunkSize: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：2000"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">子块大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.childChunkSize}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, childChunkSize: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">重叠大小</label>
+                              <Input
+                                type="number"
+                                value={node.chunker.overlapSize}
+                                onChange={(event) =>
+                                  setNodes((prev) =>
+                                    prev.map((item) =>
+                                      item.id === node.id
+                                        ? { ...item, chunker: { ...item.chunker, overlapSize: event.target.value } }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="例如：100"
+                              />
+                            </div>
+                          </>
+                        ) : null}
                       </div>
                     ) : null}
 
