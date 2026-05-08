@@ -19,15 +19,14 @@ package com.nageoffer.ai.ragent.rag.core.retrieve.channel;
 
 import cn.hutool.core.collection.CollUtil;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
-import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeChunkMapper;
 import com.nageoffer.ai.ragent.rag.config.SearchChannelProperties;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScore;
 import com.nageoffer.ai.ragent.rag.core.intent.NodeScoreFilters;
+import com.nageoffer.ai.ragent.rag.core.retrieve.RetrieverService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * BM25 关键词检索通道
@@ -41,12 +40,12 @@ import java.util.Map;
 public class KeywordSearchChannel implements SearchChannel {
 
     private final SearchChannelProperties properties;
-    private final KnowledgeChunkMapper chunkMapper;
+    private final RetrieverService retrieverService;
 
     public KeywordSearchChannel(SearchChannelProperties properties,
-                                KnowledgeChunkMapper chunkMapper) {
+                                RetrieverService retrieverService) {
         this.properties = properties;
-        this.chunkMapper = chunkMapper;
+        this.retrieverService = retrieverService;
     }
 
     @Override
@@ -72,22 +71,13 @@ public class KeywordSearchChannel implements SearchChannel {
             String question = context.getMainQuestion();
             List<String> kbIds = resolveKbIds(context);
             int topK = context.getTopK() * properties.getChannels().getKeywordBm25().getTopKMultiplier();
-            String config = properties.getChannels().getKeywordBm25().getTsvectorConfig();
 
             log.info("执行 BM25 关键词检索，问题：{}，限定知识库：{}，TopK：{}",
                     question,
                     CollUtil.isEmpty(kbIds) ? "全部" : kbIds,
                     topK);
 
-            List<Map<String, Object>> rows = chunkMapper.searchByKeyword(config, question, kbIds, topK);
-
-            List<RetrievedChunk> chunks = rows.stream()
-                    .map(row -> RetrievedChunk.builder()
-                            .id(String.valueOf(row.get("id")))
-                            .text(String.valueOf(row.get("content")))
-                            .score(((Number) row.get("score")).floatValue())
-                            .build())
-                    .toList();
+            List<RetrievedChunk> chunks = retrieverService.retrieveByKeyword(question, kbIds, topK);
 
             long latency = System.currentTimeMillis() - startTime;
             log.info("BM25 关键词检索完成，检索到 {} 个 Chunk，耗时 {}ms", chunks.size(), latency);

@@ -19,6 +19,8 @@ package com.nageoffer.ai.ragent.rag.core.retrieve;
 
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
+import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeChunkMapper;
+import com.nageoffer.ai.ragent.rag.config.SearchChannelProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,6 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -35,6 +38,8 @@ public class PgRetrieverService implements RetrieverService {
 
     private final JdbcTemplate jdbcTemplate;
     private final EmbeddingService embeddingService;
+    private final KnowledgeChunkMapper chunkMapper;
+    private final SearchChannelProperties properties;
 
     @Override
     public List<RetrievedChunk> retrieve(RetrieveRequest request) {
@@ -59,6 +64,19 @@ public class PgRetrieverService implements RetrieverService {
                         .build(),
                 vectorLiteral, request.getCollectionName(), vectorLiteral, request.getTopK()
         );
+    }
+
+    @Override
+    public List<RetrievedChunk> retrieveByKeyword(String query, List<String> kbIds, int topK) {
+        String config = properties.getChannels().getKeywordBm25().getTsvectorConfig();
+        List<Map<String, Object>> rows = chunkMapper.searchByKeyword(config, query, kbIds, topK);
+        return rows.stream()
+                .map(row -> RetrievedChunk.builder()
+                        .id(String.valueOf(row.get("id")))
+                        .text(String.valueOf(row.get("content")))
+                        .score(((Number) row.get("score")).floatValue())
+                        .build())
+                .toList();
     }
 
     private float[] normalize(float[] vector) {
