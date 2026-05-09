@@ -35,6 +35,12 @@ public enum SearchChannelType {
     INTENT_DIRECTED,
 
     /**
+     * BM25 关键词检索
+     * 基于 PostgreSQL tsvector 的全文检索
+     */
+    KEYWORD_BM25,
+
+    /**
      * ES 关键词检索
      * 基于 Elasticsearch 的关键词分词检索
      */

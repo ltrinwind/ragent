@@ -97,5 +97,20 @@ public interface RetrieverService {
      * @return RetrievedChunk 列表（按相似度排序）
      */
     List<RetrievedChunk> retrieveByVector(float[] vector, RetrieveRequest retrieveParam);
+
+    /**
+     * 基于 BM25 关键词检索
+     * <p>
+     * 利用 PostgreSQL tsvector + zhparser 全文检索，
+     * 使用 ts_rank_cd 评分（TF/IDF 近似 BM25）。
+     *
+     * @param query    用户自然语言问题
+     * @param kbIds    知识库 ID 列表，为空时不限定范围
+     * @param topK     返回的命中数量
+     * @return RetrievedChunk 列表（按相关性排序）
+     */
+    default List<RetrievedChunk> retrieveByKeyword(String query, List<String> kbIds, int topK) {
+        return List.of();
+    }
 }
 
