@@ -42,3 +42,6 @@ node_modules/
 dist/
 .vite/
 .env.local
+/CLAUDE.md
+/bash.exe.stackdump
+/BACKEND_STUDY_GUIDE.md
