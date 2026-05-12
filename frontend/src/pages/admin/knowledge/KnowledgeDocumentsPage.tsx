@@ -814,6 +814,37 @@ export function KnowledgeDocumentsPage() {
                         <div className="text-sm text-muted-foreground mt-1">开启后块大小为-1</div>
                       </div>
                     </div>
+                  ) : detailChunkStrategy === "recursive" ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <div className="text-sm font-medium mb-2">块大小</div>
+                        <Input type="number" value={detailConfigValues["chunkSize"] ?? "512"}
+                          onChange={e => setDetailConfigValues(v => ({ ...v, chunkSize: e.target.value }))} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium mb-2">重叠大小</div>
+                        <Input type="number" value={detailConfigValues["overlapSize"] ?? "128"}
+                          onChange={e => setDetailConfigValues(v => ({ ...v, overlapSize: e.target.value }))} />
+                      </div>
+                    </div>
+                  ) : detailChunkStrategy === "parent_child" ? (
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div>
+                        <div className="text-sm font-medium mb-2">父块大小</div>
+                        <Input type="number" value={detailConfigValues["parentChunkSize"] ?? "1024"}
+                          onChange={e => setDetailConfigValues(v => ({ ...v, parentChunkSize: e.target.value }))} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium mb-2">子块大小</div>
+                        <Input type="number" value={detailConfigValues["childChunkSize"] ?? "256"}
+                          onChange={e => setDetailConfigValues(v => ({ ...v, childChunkSize: e.target.value }))} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium mb-2">重叠大小</div>
+                        <Input type="number" value={detailConfigValues["overlapSize"] ?? "128"}
+                          onChange={e => setDetailConfigValues(v => ({ ...v, overlapSize: e.target.value }))} />
+                      </div>
+                    </div>
                   ) : (
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
@@ -835,6 +866,7 @@ export function KnowledgeDocumentsPage() {
                         <div className="text-sm font-medium mb-2">重叠大小</div>
                         <Input type="number" value={detailConfigValues["overlapChars"] ?? "0"}
                           onChange={e => setDetailConfigValues(v => ({ ...v, overlapChars: e.target.value }))} />
+                        <p className="text-xs text-muted-foreground mt-1">仅在单个段落过大被递归切分时生效</p>
                       </div>
                     </div>
                   )}
@@ -1642,6 +1674,9 @@ function UploadDialog({ open, onOpenChange, onSubmit }: UploadDialogProps) {
                         <FormControl>
                           <Input type="number" {...field} />
                         </FormControl>
+                        {isStructureAware && (
+                          <FormDescription>仅在单个段落过大被递归切分时生效</FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}

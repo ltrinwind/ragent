@@ -1400,6 +1400,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                                 }
                                 placeholder="例如：0"
                               />
+                              <p className="text-xs text-muted-foreground">仅在单个段落过大被递归切分时生效</p>
                             </div>
                           </>
                         ) : node.chunker.strategy === "parent_child" ? (
