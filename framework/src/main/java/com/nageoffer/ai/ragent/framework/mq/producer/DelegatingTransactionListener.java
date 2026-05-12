@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.framework.mq.producer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nageoffer.ai.ragent.framework.mq.MessageWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQTransactionListener;
@@ -54,6 +55,9 @@ public class DelegatingTransactionListener implements RocketMQLocalTransactionLi
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     public void registerLocalTransaction(String txId, Consumer<Object> localTransaction) {
         localTransactionMap.put(txId, localTransaction);
     }
@@ -88,7 +92,16 @@ public class DelegatingTransactionListener implements RocketMQLocalTransactionLi
             return RocketMQLocalTransactionState.ROLLBACK;
         }
         try {
-            MessageWrapper<?> wrapper = (MessageWrapper<?>) message.getPayload();
+            Object payload = message.getPayload();
+            MessageWrapper<?> wrapper;
+            if (payload instanceof MessageWrapper<?>) {
+                wrapper = (MessageWrapper<?>) payload;
+            } else if (payload instanceof byte[]) {
+                wrapper = objectMapper.readValue((byte[]) payload, MessageWrapper.class);
+            } else {
+                log.error("[事务消息] 回查时 payload 类型不支持: {}", payload.getClass().getName());
+                return RocketMQLocalTransactionState.UNKNOWN;
+            }
             boolean committed = checker.check(wrapper);
             RocketMQLocalTransactionState state = committed
                     ? RocketMQLocalTransactionState.COMMIT
