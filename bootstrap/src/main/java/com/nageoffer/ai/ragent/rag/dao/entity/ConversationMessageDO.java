@@ -80,6 +80,11 @@ public class ConversationMessageDO {
     private Integer thinkingDuration;
 
     /**
+     * 检索到的上下文片段，以 JSON 数组存储
+     */
+    private String contexts;
+
+    /**
      * 创建时间，自动填充
      */
     @TableField(fill = FieldFill.INSERT)

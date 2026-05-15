@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Brain, ChevronDown } from "lucide-react";
+import { Brain, ChevronDown, FileText } from "lucide-react";
 
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -21,7 +21,9 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
     !message.id.startsWith("assistant-");
   const isThinking = Boolean(message.isThinking);
   const [thinkingExpanded, setThinkingExpanded] = React.useState(false);
+  const [contextsExpanded, setContextsExpanded] = React.useState(false);
   const hasThinking = Boolean(message.thinking && message.thinking.trim().length > 0);
+  const hasContexts = Boolean(message.contexts && message.contexts.length > 0);
   const hasContent = message.content.trim().length > 0;
   const isWaiting = message.status === "streaming" && !isThinking && !hasContent;
 
@@ -89,6 +91,47 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
           {hasContent ? <MarkdownRenderer content={message.content} /> : null}
           {message.status === "error" ? (
             <p className="text-xs text-rose-500">生成已中断。</p>
+          ) : null}
+          {hasContexts ? (
+            <div className="overflow-hidden rounded-lg border border-[#BFDBFE] bg-[#DBEAFE]">
+              <button
+                type="button"
+                onClick={() => setContextsExpanded((prev) => !prev)}
+                className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-[#BFDBFE]/30"
+              >
+                <div className="flex flex-1 items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#BFDBFE]">
+                    <FileText className="h-4 w-4 text-[#2563EB]" />
+                  </div>
+                  <span className="text-sm font-medium text-[#2563EB]">参考来源</span>
+                  <span className="rounded-full bg-[#BFDBFE] px-2 py-0.5 text-xs text-[#2563EB]">
+                    {message.contexts!.length}
+                  </span>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 text-[#3B82F6] transition-transform",
+                    contextsExpanded && "rotate-180"
+                  )}
+                />
+              </button>
+              {contextsExpanded ? (
+                <div className="border-t border-[#BFDBFE] px-4 pb-4">
+                  <div className="mt-3 space-y-3">
+                    {message.contexts!.map((ctx, idx) => (
+                      <div key={idx} className="rounded-md bg-white/60 p-3">
+                        <span className="mb-1 block text-xs font-medium text-[#2563EB]">
+                          #{idx + 1}
+                        </span>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#1E40AF]">
+                          {ctx}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {showFeedback ? (
             <FeedbackButtons

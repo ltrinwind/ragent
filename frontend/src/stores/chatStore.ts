@@ -189,6 +189,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         thinking: item.thinkingContent || undefined,
         thinkingDuration: item.thinkingDuration || undefined,
         isDeepThinking: Boolean(item.thinkingContent),
+        contexts: item.contexts || undefined,
         createdAt: item.createTime,
         feedback: mapVoteToFeedback(item.vote),
         status: "done"
@@ -297,6 +298,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!payload || typeof payload !== "object") return;
         if (payload.type !== "think") return;
         get().appendThinkingContent(payload.delta);
+      },
+      onContext: (payload: { contexts: string[] }) => {
+        if (!payload?.contexts?.length) return;
+        set((state) => ({
+          messages: state.messages.map((message) =>
+            message.id === state.streamingMessageId
+              ? { ...message, contexts: payload.contexts }
+              : message
+          )
+        }));
       },
       onReject: (payload: MessageDeltaPayload) => {
         if (!payload || typeof payload !== "object") return;

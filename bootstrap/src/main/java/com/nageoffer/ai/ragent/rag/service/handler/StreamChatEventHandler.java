@@ -32,6 +32,8 @@ import com.nageoffer.ai.ragent.rag.core.memory.ConversationMemoryService;
 import lombok.extern.slf4j.Slf4j;
 import com.nageoffer.ai.ragent.rag.service.ConversationGroupService;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -51,6 +53,7 @@ public class StreamChatEventHandler implements StreamCallback {
     private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
     private final StringBuilder thinking = new StringBuilder();
+    private List<String> retrievedContexts;
     private long thinkingStartMs;
     private int thinkingDurationSeconds;
 
@@ -114,6 +117,7 @@ public class StreamChatEventHandler implements StreamCallback {
             try {
                 String thinkingContent = thinking.isEmpty() ? null : thinking.toString();
                 ChatMessage message = ChatMessage.assistant(content, thinkingContent, resolveThinkingDuration());
+                message.setContexts(retrievedContexts);
                 messageId = memoryService.append(conversationId, userId, message);
             } catch (Exception e) {
                 log.error("取消时持久化消息失败，conversationId：{}", conversationId, e);
@@ -154,6 +158,15 @@ public class StreamChatEventHandler implements StreamCallback {
     }
 
     @Override
+    public void onContext(List<String> chunks) {
+        if (taskManager.isCancelled(taskId)) {
+            return;
+        }
+        this.retrievedContexts = chunks;
+        sender.sendEvent(SSEEventType.CONTEXT.value(), Map.of("contexts", chunks));
+    }
+
+    @Override
     public void onComplete() {
         if (taskManager.isCancelled(taskId)) {
             return;
@@ -162,6 +175,7 @@ public class StreamChatEventHandler implements StreamCallback {
         try {
             String thinkingContent = thinking.isEmpty() ? null : thinking.toString();
             ChatMessage message = ChatMessage.assistant(answer.toString(), thinkingContent, resolveThinkingDuration());
+            message.setContexts(retrievedContexts);
             messageId = memoryService.append(conversationId, userId, message);
         } catch (Exception e) {
             log.error("对话完成时持久化消息失败，conversationId：{}", conversationId, e);

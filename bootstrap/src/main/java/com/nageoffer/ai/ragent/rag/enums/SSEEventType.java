@@ -31,6 +31,11 @@ public enum SSEEventType {
     META("meta"),
 
     /**
+     * 检索上下文事件（推送用于回答的 chunk 列表）
+     */
+    CONTEXT("context"),
+
+    /**
      * 增量消息事件
      */
     MESSAGE("message"),
