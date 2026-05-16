@@ -18,7 +18,9 @@
 package com.nageoffer.ai.ragent.rag.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.nageoffer.ai.ragent.rag.controller.vo.ConversationMessageVO;
 import com.nageoffer.ai.ragent.rag.dao.entity.ConversationDO;
@@ -40,6 +42,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
+
 @Service
 @RequiredArgsConstructor
 public class ConversationMessageServiceImpl implements ConversationMessageService {
@@ -52,6 +56,9 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
     @Override
     public String addMessage(ConversationMessageBO conversationMessage) {
         ConversationMessageDO messageDO = BeanUtil.toBean(conversationMessage, ConversationMessageDO.class);
+        if (CollUtil.isNotEmpty(conversationMessage.getContexts())) {
+            messageDO.setContexts(JSONUtil.toJsonStr(conversationMessage.getContexts()));
+        }
         conversationMessageMapper.insert(messageDO);
         return messageDO.getId();
     }
@@ -104,6 +111,7 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
                     .content(record.getContent())
                     .thinkingContent(record.getThinkingContent())
                     .thinkingDuration(record.getThinkingDuration())
+                    .contexts(parseContexts(record.getContexts()))
                     .vote(votesByMessageId.get(record.getId()))
                     .createTime(record.getCreateTime())
                     .build();
@@ -111,6 +119,18 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
         }
 
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> parseContexts(String contextsJson) {
+        if (StrUtil.isBlank(contextsJson)) {
+            return null;
+        }
+        try {
+            return JSONUtil.toList(contextsJson, String.class);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override

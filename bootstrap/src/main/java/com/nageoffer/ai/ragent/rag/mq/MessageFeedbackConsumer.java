@@ -33,8 +33,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @RocketMQMessageListener(
-        topic = "message-feedback_topic${unique-name:}",
-        consumerGroup = "message-feedback_cg${unique-name:}"
+        topic = "message-feedback_topic",
+        consumerGroup = "message-feedback-consumer-group"
 )
 public class MessageFeedbackConsumer implements RocketMQListener<MessageWrapper<MessageFeedbackEvent>> {
 

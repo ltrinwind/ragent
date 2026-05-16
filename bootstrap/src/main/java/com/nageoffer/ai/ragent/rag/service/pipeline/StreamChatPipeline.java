@@ -21,6 +21,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
+import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
 import com.nageoffer.ai.ragent.infra.chat.LLMService;
 import com.nageoffer.ai.ragent.infra.chat.StreamCallback;
 import com.nageoffer.ai.ragent.infra.chat.StreamCancellationHandle;
@@ -45,6 +46,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.nageoffer.ai.ragent.rag.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 
@@ -88,6 +90,7 @@ public class StreamChatPipeline {
         }
 
         RetrievalContext retrievalCtx = retrieve(ctx);
+        emitRetrievedContexts(ctx.getCallback(), retrievalCtx);
         if (handleEmptyRetrieval(ctx, retrievalCtx)) {
             return;
         }
@@ -186,6 +189,30 @@ public class StreamChatPipeline {
                 ctx.getCallback()
         );
         taskManager.bindHandle(ctx.getTaskId(), handle);
+    }
+
+    // ==================== 上下文推送 ====================
+
+    /**
+     * 将检索到的 chunk 文本通过 SSE context 事件推送给客户端。
+     * ragas-test 评测脚本会解析此事件用于 Faithfulness / ContextPrecision / ContextRecall 指标。
+     */
+    private void emitRetrievedContexts(StreamCallback callback, RetrievalContext retrievalCtx) {
+        Map<String, List<RetrievedChunk>> intentChunks = retrievalCtx.getIntentChunks();
+        if (intentChunks == null || intentChunks.isEmpty()) {
+            return;
+        }
+        List<String> chunkTexts = new ArrayList<>();
+        for (List<RetrievedChunk> chunks : intentChunks.values()) {
+            for (RetrievedChunk chunk : chunks) {
+                if (StrUtil.isNotBlank(chunk.getText())) {
+                    chunkTexts.add(chunk.getText());
+                }
+            }
+        }
+        if (!chunkTexts.isEmpty()) {
+            callback.onContext(chunkTexts);
+        }
     }
 
     // ==================== LLM 响应 ====================

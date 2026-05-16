@@ -23,6 +23,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
+import java.util.List;
 
 /**
  * 会话消息视图对象
@@ -62,6 +63,11 @@ public class ConversationMessageVO {
      * 深度思考耗时（秒）
      */
     private Integer thinkingDuration;
+
+    /**
+     * 检索到的上下文片段列表
+     */
+    private List<String> contexts;
 
     /**
      * 反馈值：1=点赞，-1=点踩，null=未反馈

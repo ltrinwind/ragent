@@ -28,6 +28,7 @@ export interface Message {
   thinkingDuration?: number;
   isDeepThinking?: boolean;
   isThinking?: boolean;
+  contexts?: string[];
   createdAt?: string;
   feedback?: FeedbackValue;
   status?: MessageStatus;
@@ -46,4 +47,8 @@ export interface MessageDeltaPayload {
 export interface CompletionPayload {
   messageId?: string | null;
   title?: string | null;
+}
+
+export interface ContextPayload {
+  contexts: string[];
 }

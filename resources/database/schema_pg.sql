@@ -72,6 +72,7 @@ CREATE TABLE t_message (
     content           TEXT        NOT NULL,
     thinking_content  TEXT,
     thinking_duration INTEGER,
+    contexts          TEXT,
     create_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     update_time       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted           SMALLINT    DEFAULT 0

@@ -19,6 +19,7 @@ package com.nageoffer.ai.ragent.rag.core.memory;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.nageoffer.ai.ragent.rag.config.MemoryProperties;
 import com.nageoffer.ai.ragent.rag.controller.vo.ConversationMessageVO;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
@@ -80,6 +81,7 @@ public class JdbcConversationMemoryStore implements ConversationMemoryStore {
                 .content(message.getContent())
                 .thinkingContent(message.getThinkingContent())
                 .thinkingDuration(message.getThinkingDuration())
+                .contexts(message.getContexts())
                 .build();
         String messageId = conversationMessageService.addMessage(conversationMessage);
 
