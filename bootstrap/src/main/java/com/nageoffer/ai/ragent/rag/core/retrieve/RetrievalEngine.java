@@ -40,11 +40,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
@@ -102,12 +105,7 @@ public class RetrievalEngine {
                 .map(CompletableFuture::join)
                 .toList();
 
-        Map<String, List<RetrievedChunk>> mergedIntentChunks = new HashMap<>();
-        for (SubQuestionContext context : contexts) {
-            if (CollUtil.isNotEmpty(context.intentChunks())) {
-                mergedIntentChunks.putAll(context.intentChunks());
-            }
-        }
+        Map<String, List<RetrievedChunk>> mergedIntentChunks = mergeIntentChunks(contexts);
 
         boolean singleQuestion = contexts.size() == 1;
         String kbContext;
@@ -286,6 +284,39 @@ public class RetrievalEngine {
         Map<String, Object> params = mcpParameterExtractor.extractParameters(question, tool, customParamPrompt);
 
         return executor.execute(params != null ? params : new HashMap<>());
+    }
+
+    /**
+     * 合并所有子问题的 intentChunks，按 chunk ID 全局去重
+     */
+    private Map<String, List<RetrievedChunk>> mergeIntentChunks(List<SubQuestionContext> contexts) {
+        Map<String, List<RetrievedChunk>> result = new HashMap<>();
+        Set<String> seenChunkIds = new HashSet<>();
+        for (SubQuestionContext context : contexts) {
+            if (CollUtil.isEmpty(context.intentChunks())) {
+                continue;
+            }
+            for (Map.Entry<String, List<RetrievedChunk>> entry : context.intentChunks().entrySet()) {
+                List<RetrievedChunk> deduped = deduplicateChunks(entry.getValue(), seenChunkIds);
+                if (CollUtil.isEmpty(deduped)) {
+                    continue;
+                }
+                result.computeIfAbsent(entry.getKey(), k -> new ArrayList<>()).addAll(deduped);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 按 chunk ID 去重，无 ID 的 chunk 保留
+     */
+    private List<RetrievedChunk> deduplicateChunks(List<RetrievedChunk> chunks, Set<String> seenChunkIds) {
+        return chunks.stream()
+                .filter(chunk -> {
+                    String chunkId = chunk.getId();
+                    return chunkId == null || seenChunkIds.add(chunkId);
+                })
+                .toList();
     }
 
     private record ToolOutput(String toolId, CallToolResult result) {
