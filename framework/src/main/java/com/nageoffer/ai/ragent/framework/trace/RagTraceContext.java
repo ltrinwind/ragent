@@ -30,7 +30,12 @@ public final class RagTraceContext {
 
     private static final TransmittableThreadLocal<String> TRACE_ID = new TransmittableThreadLocal<>();
     private static final TransmittableThreadLocal<String> TASK_ID = new TransmittableThreadLocal<>();
-    private static final TransmittableThreadLocal<Deque<String>> NODE_STACK = new TransmittableThreadLocal<>();
+    private static final TransmittableThreadLocal<Deque<String>> NODE_STACK = new TransmittableThreadLocal<>() {
+        @Override
+        public Deque<String> copy(Deque<String> parentValue) {
+            return parentValue == null ? null : new ArrayDeque<>(parentValue);
+        }
+    };
 
     private RagTraceContext() {
     }
