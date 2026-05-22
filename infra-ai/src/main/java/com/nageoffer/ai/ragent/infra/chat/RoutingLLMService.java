@@ -122,10 +122,12 @@ public class RoutingLLMService implements LLMService {
                 continue;
             }
 
+            // 这个又将 traceAwareCallback 包一层,主要用于超时阻塞检测 model 是否可用,否则降级到另一个 model
             ProbeStreamBridge bridge = new ProbeStreamBridge(callback);
 
             StreamCancellationHandle handle;
             try {
+                // 在同一个线程中,doStreamChat 模板方法会往栈插入一条记录,为 LLM-Provider
                 handle = client.streamChat(request, bridge, target);
             } catch (Exception e) {
                 healthStore.markFailure(target.id());
@@ -144,10 +146,13 @@ public class RoutingLLMService implements LLMService {
 
             ProbeStreamBridge.ProbeResult result;
             try {
+                // 超时阻塞等到首包,这里 AOP 拦截另一个 bean 的方法,记录 LLM-TTFT 的开始时间,也就是栈上挂了个 LLM-TTFT 节点
+                // 此时的栈是 LLM_ROUTING - LLM-Provider -  LLM-TTFT - 栈顶
+                // LLM 正常响应 / 超时时(ERROR),通过 AOP 环绕增强记录结束时间,然后弹出 LLM-TTFT 节点
                 result = awaitFirstPacket(bridge, handle, callback);
             } finally {
-                // 首包探测完成后（无论成功失败）弹出 LLM_PROVIDER 节点，
-                // 确保 TTFT 节点已正确归属到 provider 下
+                // 首包探测完成后（无论成功失败）弹出 LLM-provider 节点，但是没有 finish 节点,仅有在 onFinish 回调时,才会 finish 该节点
+                // 弹出只是为了模型故障转移时,能正确挂载新的 provider
                 handle.detach();
             }
 
@@ -176,6 +181,7 @@ public class RoutingLLMService implements LLMService {
         return client;
     }
 
+    // 环绕增强记录流式调用的首包耗时(LLM-TTFT)
     private ProbeStreamBridge.ProbeResult awaitFirstPacket(ProbeStreamBridge bridge,
                                                            StreamCancellationHandle handle,
                                                            StreamCallback callback) {

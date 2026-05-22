@@ -146,7 +146,9 @@ public abstract class AbstractOpenAIStyleChatClient implements ChatClient {
         // 该 span 由 SSE 终态（onComplete / onError）或 cancel 时收尾，记录真实端到端耗时
         // 注意：此处不 detach，由调用方（RoutingLLMService）在 awaitFirstPacket 之后调 handle.detach()
         StreamSpan span = streamTraceSupport.beginStreamNode(provider() + "-stream-chat", "LLM_PROVIDER");
+        // 这里又把 ProbeStreamBridge 包了一层,带入到线程池中,作用是记录异步线程池 LLM 流式响应的完整生命周期
         StreamSpanCallback wrappedCallback = new StreamSpanCallback(callback, span);
+        // 此时丢到线程池中,栈是 LLM-Routing - LLM-Provider
         StreamCancellationHandle inner = StreamAsyncExecutor.submit(
                 modelStreamExecutor,
                 call,

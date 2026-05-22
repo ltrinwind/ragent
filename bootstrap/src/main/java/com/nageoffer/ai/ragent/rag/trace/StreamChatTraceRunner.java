@@ -69,6 +69,7 @@ public class StreamChatTraceRunner {
 
         String traceId = IdUtil.getSnowflakeNextIdStr();
         long startMillis = System.currentTimeMillis();
+        // 写入整个问答流程的开始时间节点
         traceRecordService.startRun(RagTraceRunDO.builder()
                 .traceId(traceId)
                 .traceName(TRACE_NAME)
@@ -82,6 +83,9 @@ public class StreamChatTraceRunner {
                 .build());
 
         Date runStartTime = new Date(startMillis);
+        // traceAwareCallback 包的原始最内层的负责推消息到前端的 callback,有两个作用:
+        // 1. 记录从用户问问题 -> 系统响应第一个 token 所耗的时间(用户感知首包)
+        // 2. 系统回答结束时,更新整个问答流程的结束时间
         StreamCallback traceAwareCallback = new ForwardingStreamCallback(callback) {
             @Override
             protected void onFirstContent() {
