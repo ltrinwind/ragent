@@ -97,6 +97,19 @@ Ragent 是一个企业级 Agentic RAG 平台，覆盖从文档入库到智能问
 
 **预期收益**：系统管控与业务语义解耦，sys_metadata 保证安全合规（权限、过期），biz_metadata 提升检索精度（结构化过滤）。admin 可按业务场景动态配置 schema。
 
+### 多模态文档嵌入
+
+**动机**：当前系统仅处理文档中的文本内容，PDF/PPT 中的图表、截图等图片信息在解析阶段被丢弃。用户上传包含营收柱状图、业务占比饼图等可视化数据的文档后，无法通过自然语言查询图表中的具体数据。
+
+**规划**：通过 VLM（视觉语言模型）读取文档中的图片并生成结构化文字描述，将描述作为 chunk content 进行嵌入和检索，使系统能回答文档中图表相关的问题。
+
+- **Ingestion 阶段**：Tika 提取文档中的嵌入图片 → 上传至 RustFS → VLM 生成图片描述 → 描述文本作为 chunk content → 走现有文本 Embedding 入库
+- **Chat 阶段**：用户提问命中图片 chunk 后，LLM 基于图片描述文本回答（描述已包含图表中的数据和语义信息）
+- **架构改动**：`ChatMessage` 扩展支持多模态内容（`ContentPart`），VLM 调用走现有 `RoutingLLMService` 路由/熔断/降级链路
+- **Pipeline 扩展**：新增 `ImageDescriptionNode`，Chunk 模式重构为内部动态构建 Pipeline 统一走 `IngestionEngine` 执行，消除双路径问题
+
+**预期收益**：文档中的图表、表格、截图等视觉信息不再丢失，RAG 系统覆盖文档全量语义，检索召回率和回答完整性显著提升。
+
 
 ## 贡献
 

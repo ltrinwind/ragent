@@ -44,7 +44,7 @@ public class KnowledgeDocumentChunkTransactionChecker implements TransactionChec
     private final KnowledgeDocumentMapper documentMapper;
     private final DelegatingTransactionListener transactionListener;
 
-    @Value("knowledge-document-chunk_topic${unique-name:}")
+    @Value("knowledge-document-chunk_topic")
     private String chunkTopic;
 
     @PostConstruct

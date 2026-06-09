@@ -49,7 +49,7 @@ public class MessageFeedbackServiceImpl implements MessageFeedbackService {
     private final ConversationMessageMapper conversationMessageMapper;
     private final MessageQueueProducer messageQueueProducer;
 
-    @Value("message-feedback_topic${unique-name:}")
+    @Value("message-feedback_topic")
     private String feedbackTopic;
 
     @Override

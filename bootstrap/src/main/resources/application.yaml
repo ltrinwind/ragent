@@ -5,7 +5,7 @@ server:
 
 spring:
   application:
-    name: ragent${unique-name:}-service
+    name: ragent-service
 
   servlet:
     multipart:
@@ -35,7 +35,7 @@ spring:
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
   producer:
-    group: ragent-producer${unique-name:}_pg
+    group: ragent-producer_pg
     send-message-timeout: 2000
 
 milvus:
