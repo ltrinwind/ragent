@@ -73,6 +73,21 @@ public class KnowledgeChunkVO {
     private Integer enabled;
 
     /**
+     * 内容类型：TEXT 或 IMAGE
+     */
+    private String contentType;
+
+    /**
+     * 图片对象存储地址（仅 IMAGE 类型有效）
+     */
+    private String imageUrl;
+
+    /**
+     * 图片 MIME 类型（仅 IMAGE 类型有效）
+     */
+    private String imageMimeType;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

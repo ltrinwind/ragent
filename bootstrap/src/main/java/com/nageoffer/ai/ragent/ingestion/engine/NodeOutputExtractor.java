@@ -19,6 +19,7 @@ package com.nageoffer.ai.ragent.ingestion.engine;
 
 import com.nageoffer.ai.ragent.ingestion.domain.context.DocumentSource;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import org.springframework.stereotype.Component;
@@ -49,6 +50,7 @@ public class NodeOutputExtractor {
             case CHUNKER -> chunkerOutput(context);
             case ENRICHER -> enricherOutput(context);
             case INDEXER -> indexerOutput(context, config);
+            case IMAGE_DESCRIPTION -> imageDescriptionOutput(context);
         };
     }
 
@@ -101,6 +103,24 @@ public class NodeOutputExtractor {
         output.put("chunkCount", countIndexable(context));
         output.put("chunks", context.getChunks());
         return output;
+    }
+
+    private Map<String, Object> imageDescriptionOutput(IngestionContext context) {
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("imageChunkCount", countImageChunks(context));
+        output.put("totalChunkCount", countIndexable(context));
+        output.put("extractedImageCount",
+                context.getExtractedImages() != null ? context.getExtractedImages().size() : 0);
+        return output;
+    }
+
+    private int countImageChunks(IngestionContext context) {
+        if (context.getChunks() == null || context.getChunks().isEmpty()) {
+            return 0;
+        }
+        return (int) context.getChunks().stream()
+                .filter(c -> ChunkContentType.IMAGE == c.getContentType())
+                .count();
     }
 
     private Map<String, Object> indexerOutput(IngestionContext context, NodeConfig config) {

@@ -108,6 +108,14 @@ rag:
     enabled: true
     max-error-length: 1000
 
+  multimodal:
+    enabled: false
+    max-images-per-document: 50
+    image-min-size-kb: 5
+    max-image-bytes: 4194304
+    vlm-concurrency: 4
+    vlm-timeout-seconds: 60
+
 ai:
   providers:
     ollama:
@@ -115,24 +123,28 @@ ai:
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        vision: /v1/chat/completions
     bailian:
       url: https://dashscope.aliyuncs.com
       api-key: ${BAILIAN_API_KEY:}
       endpoints:
         chat: /compatible-mode/v1/chat/completions
         rerank: /api/v1/services/rerank/text-rerank/text-rerank
+        vision: /compatible-mode/v1/chat/completions
     aihubmix:
       url: https://aihubmix.com
       api-key: ${AIHUBMIX_API_KEY:}
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        vision: /v1/chat/completions
     siliconflow:
       url: https://api.siliconflow.cn
       api-key: ${SILICONFLOW_API_KEY:}
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        vision: /v1/chat/completions
 
   selection:
     failure-threshold: 2
@@ -199,7 +211,17 @@ ai:
         model: noop
         priority: 100
 
-rustfs:
+  vision:
+    default-model: qwen-vl-max
+    candidates:
+      - id: qwen-vl-max
+        provider: bailian
+        model: qwen-vl-max
+        priority: 1
+      - id: qwen2.5-vl-local
+        provider: ollama
+        model: qwen2.5vl:7b
+        priority: 2
   url: http://localhost:9000
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}
   secret-access-key: ${RUSTFS_SECRET_KEY:rustfsadmin}

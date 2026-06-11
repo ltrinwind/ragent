@@ -57,6 +57,11 @@ public class AIModelProperties {
     private ModelGroup rerank = new ModelGroup();
 
     /**
+     * 视觉理解模型组配置
+     */
+    private ModelGroup vision = new ModelGroup();
+
+    /**
      * 模型选择策略配置
      */
     private Selection selection = new Selection();

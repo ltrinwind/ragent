@@ -259,6 +259,9 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                     req.setChunkId(vc.getChunkId());
                     req.setIndex(vc.getIndex());
                     req.setContent(vc.getContent());
+                    req.setContentType(vc.getContentType().getValue());
+                    req.setImageUrl(vc.getImageUrl());
+                    req.setImageMimeType(vc.getImageMimeType());
                     return req;
                 })
                 .toList();
@@ -361,6 +364,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                 .pipelineId(pipelineId)
                 .rawBytes(fileBytes)
                 .mimeType(documentDO.getFileType())
+                .embeddingModel(kbDO.getEmbeddingModel())
                 .vectorSpaceId(VectorSpaceId.builder()
                         .logicalName(kbDO.getCollectionName())
                         .build())

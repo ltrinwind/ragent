@@ -44,7 +44,13 @@ public enum ModelCapability {
      * 重排序能力
      * 对搜索结果进行重新排序，提高相关性
      */
-    RERANK("Rerank");
+    RERANK("Rerank"),
+
+    /**
+     * 视觉理解能力
+     * 通过视觉语言模型（VLM）对图片进行理解和描述
+     */
+    VISION("Vision");
 
     /**
      * 能力的显示名称

@@ -41,6 +41,7 @@ import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.infra.token.TokenCounterService;
 import com.nageoffer.ai.ragent.knowledge.enums.DocumentStatus;
@@ -131,6 +132,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .charCount(charCount)
                 .tokenCount(tokenCount)
                 .parentId(requestParam.getParentId())
+                .contentType(ChunkContentType.fromValue(requestParam.getContentType()))
+                .imageUrl(requestParam.getImageUrl())
+                .imageMimeType(requestParam.getImageMimeType())
                 .enabled(1)
                 .createdBy(UserContext.getUsername())
                 .updatedBy(UserContext.getUsername())
@@ -209,6 +213,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                     .tokenCount(resolveTokenCount(content))
                     .enabled(1)
                     .parentId(request.getParentId())
+                    .contentType(ChunkContentType.fromValue(request.getContentType()))
+                    .imageUrl(request.getImageUrl())
+                    .imageMimeType(request.getImageMimeType())
                     .createdBy(username)
                     .updatedBy(username)
                     .build();

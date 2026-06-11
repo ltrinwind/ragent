@@ -15,49 +15,41 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.infra.vision;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * 知识库 Chunk 创建请求
+ * 视觉模型请求 DTO
+ * 封装发送给 VLM 的请求参数
  */
 @Data
-public class KnowledgeChunkCreateRequest {
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class VisionRequest {
 
     /**
-     * 分块正文内容
+     * 提示词（描述指令）
      */
-    private String content;
+    private String prompt;
 
     /**
-     * 下标
+     * 图片的 base64 data URI
+     * 格式：data:{mimeType};base64,{payload}
      */
-    private Integer index;
+    private String base64DataUri;
 
     /**
-     * 分块 ID
+     * 生成温度（可选）
      */
-    private String chunkId;
+    private Double temperature;
 
     /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
+     * 最大生成 token 数（可选）
      */
-    private String parentId;
-
-    /**
-     * 内容类型：TEXT 或 IMAGE
-     */
-    private String contentType;
-
-    /**
-     * 图片对象存储地址（仅 IMAGE 类型有效）
-     */
-    private String imageUrl;
-
-    /**
-     * 图片 MIME 类型（仅 IMAGE 类型有效）
-     */
-    private String imageMimeType;
+    private Integer maxTokens;
 }

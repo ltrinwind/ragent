@@ -15,49 +15,29 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
+package com.nageoffer.ai.ragent.infra.vision;
 
-import lombok.Data;
+import com.nageoffer.ai.ragent.infra.enums.ModelProvider;
+import okhttp3.OkHttpClient;
+import org.springframework.stereotype.Service;
 
 /**
- * 知识库 Chunk 创建请求
+ * Ollama 本地视觉模型客户端
  */
-@Data
-public class KnowledgeChunkCreateRequest {
+@Service
+public class OllamaVisionClient extends AbstractOpenAIStyleVisionClient {
 
-    /**
-     * 分块正文内容
-     */
-    private String content;
+    public OllamaVisionClient(OkHttpClient syncHttpClient) {
+        super(syncHttpClient);
+    }
 
-    /**
-     * 下标
-     */
-    private Integer index;
+    @Override
+    public String provider() {
+        return ModelProvider.OLLAMA.getId();
+    }
 
-    /**
-     * 分块 ID
-     */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
-
-    /**
-     * 内容类型：TEXT 或 IMAGE
-     */
-    private String contentType;
-
-    /**
-     * 图片对象存储地址（仅 IMAGE 类型有效）
-     */
-    private String imageUrl;
-
-    /**
-     * 图片 MIME 类型（仅 IMAGE 类型有效）
-     */
-    private String imageMimeType;
+    @Override
+    protected boolean requiresApiKey() {
+        return false;
+    }
 }

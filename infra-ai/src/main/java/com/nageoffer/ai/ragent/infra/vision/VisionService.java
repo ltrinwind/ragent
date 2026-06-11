@@ -15,49 +15,30 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.knowledge.controller.request;
-
-import lombok.Data;
+package com.nageoffer.ai.ragent.infra.vision;
 
 /**
- * 知识库 Chunk 创建请求
+ * 视觉理解服务接口
+ * <p>
+ * 提供图片描述能力，自动选择可用的视觉模型并进行降级处理
+ * 支持自动路由和指定模型两种调用方式
  */
-@Data
-public class KnowledgeChunkCreateRequest {
+public interface VisionService {
 
     /**
-     * 分块正文内容
+     * 使用默认模型对图片进行描述（自动路由 + 降级）
+     *
+     * @param request 视觉请求
+     * @return 图片描述文本
      */
-    private String content;
+    String describe(VisionRequest request);
 
     /**
-     * 下标
+     * 使用指定模型对图片进行描述
+     *
+     * @param request 视觉请求
+     * @param modelId 指定的模型ID
+     * @return 图片描述文本
      */
-    private Integer index;
-
-    /**
-     * 分块 ID
-     */
-    private String chunkId;
-
-    /**
-     * 父块ID（父子分块模式下，子块指向其所属父块）
-     * 普通分块模式下为 null
-     */
-    private String parentId;
-
-    /**
-     * 内容类型：TEXT 或 IMAGE
-     */
-    private String contentType;
-
-    /**
-     * 图片对象存储地址（仅 IMAGE 类型有效）
-     */
-    private String imageUrl;
-
-    /**
-     * 图片 MIME 类型（仅 IMAGE 类型有效）
-     */
-    private String imageMimeType;
+    String describe(VisionRequest request, String modelId);
 }

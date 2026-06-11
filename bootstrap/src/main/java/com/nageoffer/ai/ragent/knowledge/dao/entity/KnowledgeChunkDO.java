@@ -17,12 +17,14 @@
 
 package com.nageoffer.ai.ragent.knowledge.dao.entity;
 
+import com.baomidou.mybatisplus.annotation.EnumValue;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -91,6 +93,22 @@ public class KnowledgeChunkDO {
      * 普通分块模式下为 null
      */
     private String parentId;
+
+    /**
+     * 内容类型：TEXT 或 IMAGE
+     */
+    @EnumValue
+    private ChunkContentType contentType;
+
+    /**
+     * 图片对象存储地址（仅 IMAGE 类型有效）
+     */
+    private String imageUrl;
+
+    /**
+     * 图片 MIME 类型（仅 IMAGE 类型有效）
+     */
+    private String imageMimeType;
 
     /**
      * 创建人
