@@ -101,14 +101,15 @@ Ragent 是一个企业级 Agentic RAG 平台，覆盖从文档入库到智能问
 
 **动机**：当前系统仅处理文档中的文本内容，PDF/PPT 中的图表、截图等图片信息在解析阶段被丢弃。用户上传包含营收柱状图、业务占比饼图等可视化数据的文档后，无法通过自然语言查询图表中的具体数据。
 
-**规划**：通过 VLM（视觉语言模型）读取文档中的图片并生成结构化文字描述，将描述作为 chunk content 进行嵌入和检索，使系统能回答文档中图表相关的问题。
+**规划**：通过 VLM（视觉语言模型）将文档中的图片转化为结构化文字描述，描述作为 chunk content 参与嵌入与检索。仅在 Pipeline 模式下生效，Chunk 模式保持不变，暂不适配 Milvus。
 
-- **Ingestion 阶段**：Tika 提取文档中的嵌入图片 → 上传至 RustFS → VLM 生成图片描述 → 描述文本作为 chunk content → 走现有文本 Embedding 入库
-- **Chat 阶段**：用户提问命中图片 chunk 后，LLM 基于图片描述文本回答（描述已包含图表中的数据和语义信息）
-- **架构改动**：`ChatMessage` 扩展支持多模态内容（`ContentPart`），VLM 调用走现有 `RoutingLLMService` 路由/熔断/降级链路
-- **Pipeline 扩展**：新增 `ImageDescriptionNode`，Chunk 模式重构为内部动态构建 Pipeline 统一走 `IngestionEngine` 执行，消除双路径问题
+- **视觉模型独立服务层**：参照 embedding/rerank 模式，新增 `VisionClient` → `RoutingVisionService` → `ai.vision` ModelGroup 的完整路由链路，支持三态熔断与自动降级，不修改现有 ChatMessage/ChatClient。提供 Bailian、Ollama、SiliconFlow、AIHubMix 四个 Provider 实现
+- **Tika 图片提取**：自定义 `EmbeddedDocumentExtractor` 收集 PDF 内嵌图片，按大小、数量、hash 去重三重过滤
+- **Pipeline 新增节点**：`ImageDescriptionNode` 读取提取图片 → 上传 RustFS 对象存储 → VLM 以 base64 data URI 调用生成描述 → 构造 `contentType=IMAGE` 的 VectorChunk → 走现有文本 Embedding 入库
+- **检索增强**：`PgRetrieverService` 向量检索 JOIN `t_knowledge_chunk` 返回图片 URL 和 MIME 类型，BM25 全文检索同步补充多模态字段
+- **数据模型扩展**：`VectorChunk`、`RetrievedChunk`、`KnowledgeChunkDO` 等统一增加 `contentType`/`imageUrl`/`imageMimeType` 字段，数据库 `t_knowledge_chunk` 表新增对应列
 
-**预期收益**：文档中的图表、表格、截图等视觉信息不再丢失，RAG 系统覆盖文档全量语义，检索召回率和回答完整性显著提升。
+**预期收益**：文档中的图表、表格、截图等视觉信息不再丢失，RAG 系统覆盖文档全量语义。视觉模型独立管理，故障不影响 Chat/Embedding 等其他模型链路。
 
 
 ## 贡献
