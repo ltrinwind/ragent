@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.infra.chat;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -50,6 +51,17 @@ public abstract class ForwardingStreamCallback implements StreamCallback {
     @Override
     public final void onThinking(String content) {
         delegate.onThinking(content);
+    }
+
+    /**
+     * 透传检索上下文片段到 delegate。
+     * <p>
+     * 必须显式转发，否则 trace 等装饰路径下 onContext 会落到接口的默认空实现，
+     * 导致「参考来源」SSE 事件与消息持久化被静默丢弃。
+     */
+    @Override
+    public final void onContext(List<String> chunks) {
+        delegate.onContext(chunks);
     }
 
     /**
