@@ -93,6 +93,8 @@ rag:
       vector-global:
         confidence-threshold: 0.6
         top-k-multiplier: 3
+        # 余弦相似度下限：低于该分的向量召回结果在 SQL 源头丢弃，不进入后续 RRF/Rerank
+        score-threshold: 0.5
       intent-directed:
         min-intent-score: 0.4
         top-k-multiplier: 2

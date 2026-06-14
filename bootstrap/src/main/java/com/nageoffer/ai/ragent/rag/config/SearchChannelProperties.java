@@ -88,6 +88,14 @@ public class SearchChannelProperties {
          * 全局检索时召回更多候选，后续通过 Rerank 筛选
          */
         private int topKMultiplier = 3;
+
+        /**
+         * 向量相似度下限（余弦相似度，归一化向量下 ∈ [0,1]）。
+         * <p>
+         * 在向量召回 SQL 源头即过滤掉低于该分数的 chunk，避免低相关结果进入 RRF / Rerank。
+         * 设为 0 表示不过滤（仅丢弃反相关的极端情况）。
+         */
+        private double scoreThreshold = 0.5;
     }
 
     @Data

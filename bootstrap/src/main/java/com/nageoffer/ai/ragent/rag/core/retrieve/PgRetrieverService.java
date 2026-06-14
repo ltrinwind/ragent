@@ -55,7 +55,9 @@ public class PgRetrieverService implements RetrieverService {
         jdbcTemplate.execute("SET hnsw.ef_search = 200");
 
         String vectorLiteral = toVectorLiteral(vector);
+        double scoreThreshold = properties.getChannels().getVectorGlobal().getScoreThreshold();
         // JOIN t_knowledge_chunk 以获取 content_type, image_url, image_mime_type
+        // 相似度下限过滤：低于 scoreThreshold 的 chunk 在召回源头即丢弃，不进入 RRF / Rerank
         // noinspection SqlDialectInspection,SqlNoDataSourceInspection
         return jdbcTemplate.query(
                 "SELECT v.id, v.content, c.content_type, c.image_url, c.image_mime_type, " +
@@ -64,6 +66,7 @@ public class PgRetrieverService implements RetrieverService {
                         "JOIN t_knowledge_chunk c ON c.id = v.id " +
                         "WHERE v.metadata->>'collection_name' = ? " +
                         "AND c.enabled = 1 AND c.deleted = 0 " +
+                        "AND 1 - (v.embedding <=> ?::vector) >= ? " +
                         "ORDER BY v.embedding <=> ?::vector LIMIT ?",
                 (rs, rowNum) -> RetrievedChunk.builder()
                         .id(rs.getString("id"))
@@ -73,7 +76,7 @@ public class PgRetrieverService implements RetrieverService {
                         .imageMimeType(rs.getString("image_mime_type"))
                         .score(rs.getFloat("score"))
                         .build(),
-                vectorLiteral, request.getCollectionName(), vectorLiteral, request.getTopK()
+                vectorLiteral, request.getCollectionName(), vectorLiteral, scoreThreshold, vectorLiteral, request.getTopK()
         );
     }
 
