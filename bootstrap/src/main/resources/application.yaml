@@ -231,6 +231,7 @@ ai:
         provider: ollama
         model: qwen2.5vl:7b
         priority: 3
+rustfs:
   url: http://localhost:9000
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}
   secret-access-key: ${RUSTFS_SECRET_KEY:rustfsadmin}
