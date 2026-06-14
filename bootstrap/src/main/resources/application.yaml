@@ -154,12 +154,12 @@ ai:
     message-chunk-size: 1
 
   chat:
-    default-model: qwen3-max
+    default-model: qwen3.6-plus
     deep-thinking-model: qwen3-max
     candidates:
-      - id: qwen-plus
+      - id: qwen3.6-plus
         provider: bailian
-        model: qwen-plus-latest
+        model: qwen3.6-plus
         priority: 1
       - id: qwen3-local
         provider: ollama
