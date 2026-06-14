@@ -144,6 +144,7 @@ ai:
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        rerank: /v1/rerank
         vision: /v1/chat/completions
 
   selection:
@@ -200,12 +201,16 @@ ai:
         priority: 3
 
   rerank:
-    default-model: qwen3-rerank
+    default-model: bge-reranker-v2-m3
     candidates:
+      - id: bge-reranker-v2-m3
+        provider: siliconflow
+        model: BAAI/bge-reranker-v2-m3
+        priority: 1
       - id: qwen3-rerank
         provider: bailian
         model: qwen3-rerank
-        priority: 1
+        priority: 2
       - id: rerank-noop
         provider: noop
         model: noop

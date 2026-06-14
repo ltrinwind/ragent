@@ -29,56 +29,56 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * 百炼（阿里云 DashScope）rerank 客户端
+ * SiliconFlow（硅基流动）rerank 客户端
  * <p>
- * DashScope rerank 请求体为嵌套结构：
- * {@code {model, input:{query, documents}, parameters:{top_n, return_documents}}}，
- * 响应 results 位于 {@code output.results} 下。
+ * SiliconFlow rerank 接口为 Cohere 风格的扁平结构：
+ * <pre>
+ * POST /v1/rerank   (base: https://api.siliconflow.cn)
+ * {
+ *   "model": "BAAI/bge-reranker-v2-m3",
+ *   "query": "...",
+ *   "documents": ["...", "..."],
+ *   "return_documents": true,
+ *   "top_n": 4
+ * }
+ * </pre>
+ * 响应 results 位于顶层：{@code {results:[{index, relevance_score, document}], meta:{...}}}。
+ * <p>
+ * 文档：<a href="https://api-docs.siliconflow.cn/docs/api/rerank-post">SiliconFlow Rerank API</a>
  */
 @Service
-public class BaiLianRerankClient extends AbstractRerankClient {
+public class SiliconFlowRerankClient extends AbstractRerankClient {
 
-    public BaiLianRerankClient(OkHttpClient syncHttpClient) {
+    public SiliconFlowRerankClient(OkHttpClient syncHttpClient) {
         super(syncHttpClient);
     }
 
     @Override
     public String provider() {
-        return ModelProvider.BAI_LIAN.getId();
+        return ModelProvider.SILICON_FLOW.getId();
     }
 
     @Override
     protected JsonObject buildRequestBody(String query, List<RetrievedChunk> candidates, int topN, String model) {
         JsonObject reqBody = new JsonObject();
         reqBody.addProperty("model", model);
-
-        JsonObject input = new JsonObject();
-        input.addProperty("query", query);
+        reqBody.addProperty("query", query);
 
         JsonArray documentsArray = new JsonArray();
         for (RetrievedChunk each : candidates) {
             documentsArray.add(each.getText() == null ? "" : each.getText());
         }
-        input.add("documents", documentsArray);
-
-        JsonObject parameters = new JsonObject();
-        parameters.addProperty("top_n", topN);
-        parameters.addProperty("return_documents", true);
-
-        reqBody.add("input", input);
-        reqBody.add("parameters", parameters);
+        reqBody.add("documents", documentsArray);
+        reqBody.addProperty("return_documents", true);
+        reqBody.addProperty("top_n", topN);
         return reqBody;
     }
 
     @Override
     protected JsonArray extractResults(JsonObject respJson) {
-        if (respJson == null || !respJson.has("output")) {
-            throw new ModelClientException(provider() + " rerank 响应缺少 output", ModelClientErrorType.INVALID_RESPONSE, null);
-        }
-        JsonObject output = respJson.getAsJsonObject("output");
-        if (output == null || !output.has("results")) {
+        if (respJson == null || !respJson.has("results")) {
             throw new ModelClientException(provider() + " rerank 响应缺少 results", ModelClientErrorType.INVALID_RESPONSE, null);
         }
-        return output.getAsJsonArray("results");
+        return respJson.getAsJsonArray("results");
     }
 }
