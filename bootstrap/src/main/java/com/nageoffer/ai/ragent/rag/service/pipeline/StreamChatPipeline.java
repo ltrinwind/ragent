@@ -22,9 +22,12 @@ import cn.hutool.core.util.StrUtil;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
 import com.nageoffer.ai.ragent.framework.convention.ChatRequest;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
+import com.nageoffer.ai.ragent.framework.convention.RetrievedContextItem;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import com.nageoffer.ai.ragent.infra.chat.LLMService;
 import com.nageoffer.ai.ragent.infra.chat.StreamCallback;
 import com.nageoffer.ai.ragent.infra.chat.StreamCancellationHandle;
+import com.nageoffer.ai.ragent.knowledge.enums.ChunkImageEndpoint;
 import com.nageoffer.ai.ragent.rag.core.guidance.GuidanceDecision;
 import com.nageoffer.ai.ragent.rag.core.guidance.IntentGuidanceService;
 import com.nageoffer.ai.ragent.rag.core.intent.IntentResolver;
@@ -194,24 +197,39 @@ public class StreamChatPipeline {
     // ==================== 上下文推送 ====================
 
     /**
-     * 将检索到的 chunk 文本通过 SSE context 事件推送给客户端。
-     * ragas-test 评测脚本会解析此事件用于 Faithfulness / ContextPrecision / ContextRecall 指标。
+     * 将检索到的 chunk 通过 SSE context 事件推送给客户端。
+     * <p>
+     * 不再压成纯文本 string[]：按命中顺序构造结构化 RetrievedContextItem，
+     * IMAGE chunk 额外携带图片代理 URL（由 chunk id 拼接，不查任何表），
+     * 前端据此在「参考来源」面板按命中顺序与文本交错展示图片缩略图 + 描述。
      */
     private void emitRetrievedContexts(StreamCallback callback, RetrievalContext retrievalCtx) {
         Map<String, List<RetrievedChunk>> intentChunks = retrievalCtx.getIntentChunks();
         if (intentChunks == null || intentChunks.isEmpty()) {
             return;
         }
-        List<String> chunkTexts = new ArrayList<>();
+        List<RetrievedContextItem> items = new ArrayList<>();
         for (List<RetrievedChunk> chunks : intentChunks.values()) {
             for (RetrievedChunk chunk : chunks) {
-                if (StrUtil.isNotBlank(chunk.getText())) {
-                    chunkTexts.add(chunk.getText());
+                if (StrUtil.isBlank(chunk.getText())) {
+                    continue;
                 }
+                boolean isImage = ChunkContentType.IMAGE.getValue().equalsIgnoreCase(chunk.getContentType());
+                RetrievedContextItem item = RetrievedContextItem.builder()
+                        .id(chunk.getId())
+                        .text(chunk.getText())
+                        .contentType(isImage ? ChunkContentType.IMAGE.getValue() : ChunkContentType.TEXT.getValue())
+                        .score(chunk.getScore())
+                        .build();
+                if (isImage) {
+                    // 代理 URL 由 chunk id 当场拼接，不查询任何表；id 是「检索 → 前端 → 代理端点 → DB → 对象存储」的稳定纽带
+                    item.setImageUrl(ChunkImageEndpoint.buildPath(chunk.getId()));
+                }
+                items.add(item);
             }
         }
-        if (!chunkTexts.isEmpty()) {
-            callback.onContext(chunkTexts);
+        if (!items.isEmpty()) {
+            callback.onContext(items);
         }
     }
 

@@ -17,6 +17,7 @@
 
 package com.nageoffer.ai.ragent.rag.service.bo;
 
+import com.nageoffer.ai.ragent.framework.convention.RetrievedContextItem;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -64,7 +65,7 @@ public class ConversationMessageBO {
     private Integer thinkingDuration;
 
     /**
-     * 检索到的上下文片段列表
+     * 检索到的上下文片段列表（结构化，IMAGE 条目携带图片代理 URL）
      */
-    private List<String> contexts;
+    private List<RetrievedContextItem> contexts;
 }

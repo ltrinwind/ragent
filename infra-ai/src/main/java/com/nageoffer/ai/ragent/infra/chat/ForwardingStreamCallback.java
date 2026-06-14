@@ -17,6 +17,8 @@
 
 package com.nageoffer.ai.ragent.infra.chat;
 
+import com.nageoffer.ai.ragent.framework.convention.RetrievedContextItem;
+
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -60,8 +62,8 @@ public abstract class ForwardingStreamCallback implements StreamCallback {
      * 导致「参考来源」SSE 事件与消息持久化被静默丢弃。
      */
     @Override
-    public final void onContext(List<String> chunks) {
-        delegate.onContext(chunks);
+    public final void onContext(List<RetrievedContextItem> items) {
+        delegate.onContext(items);
     }
 
     /**

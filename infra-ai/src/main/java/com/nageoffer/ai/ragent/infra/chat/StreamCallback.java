@@ -17,6 +17,8 @@
 
 package com.nageoffer.ai.ragent.infra.chat;
 
+import com.nageoffer.ai.ragent.framework.convention.RetrievedContextItem;
+
 import java.util.List;
 
 /**
@@ -65,14 +67,14 @@ public interface StreamCallback {
     }
 
     /**
-     * 推送检索到的上下文片段（用于 RAG 评测等场景）
+     * 推送检索到的结构化上下文片段（用于前端「参考来源」面板展示文本与图片等）
      * <p>
-     * 在检索阶段完成后调用，将所有用于回答的 chunk 文本推送给客户端。
+     * 在检索阶段完成后调用，将所有用于回答的 chunk 按命中顺序推送给客户端。
      * 默认空实现，不需要此功能的回调可以忽略。
      *
-     * @param chunks 检索到的上下文文本列表
+     * @param items 检索到的结构化上下文条目列表（含 contentType / imageUrl 等）
      */
-    default void onContext(List<String> chunks) {
+    default void onContext(List<RetrievedContextItem> items) {
     }
 
     /**

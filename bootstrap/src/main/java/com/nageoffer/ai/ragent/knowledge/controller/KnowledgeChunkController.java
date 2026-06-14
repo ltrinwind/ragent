@@ -25,8 +25,13 @@ import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeChunkCreate
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeChunkPageRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeChunkUpdateRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.vo.KnowledgeChunkVO;
+import com.nageoffer.ai.ragent.knowledge.enums.ChunkImageEndpoint;
+import com.nageoffer.ai.ragent.knowledge.service.ChunkImageResource;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
+import com.nageoffer.ai.ragent.rag.service.FileStorageService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.util.StreamUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,6 +43,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.InputStream;
+
 /**
  * 知识库 Chunk 管理接口
  */
@@ -47,6 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeChunkController {
 
     private final KnowledgeChunkService knowledgeChunkService;
+    private final FileStorageService fileStorageService;
 
     /**
      * 分页查询 Chunk 列表
@@ -107,5 +115,26 @@ public class KnowledgeChunkController {
                                     @RequestBody(required = false) KnowledgeChunkBatchRequest request) {
         knowledgeChunkService.batchToggleEnabled(docId, request, enabled);
         return Results.success();
+    }
+
+    /**
+     * 图片代理：返回 chunk 关联的原始图片流，供前端「参考来源」面板展示图片缩略图。
+     * <p>
+     * 业务逻辑（查询 / IMAGE+imageUrl 校验 / MIME 兜底）在 {@link KnowledgeChunkService#resolveImage}，
+     * controller 仅负责 HTTP 层：资源不存在 → 404；存在则按解析结果写响应头并流式输出字节。
+     * 路径常量见 {@link ChunkImageEndpoint}，与 StreamChatPipeline 拼接代理 URL 共用。
+     */
+    @GetMapping(ChunkImageEndpoint.PATH_PREFIX + "{chunk-id}" + ChunkImageEndpoint.PATH_SUFFIX)
+    public void image(@PathVariable("chunk-id") String chunkId, HttpServletResponse response) throws Exception {
+        ChunkImageResource resource = knowledgeChunkService.resolveImage(chunkId);
+        if (resource == null) {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        response.setContentType(resource.mimeType());
+        response.setHeader("Content-Disposition", "inline; filename=\"" + resource.filename() + "\"");
+        try (InputStream in = fileStorageService.openStream(resource.imageUrl())) {
+            StreamUtils.copy(in, response.getOutputStream());
+        }
     }
 }

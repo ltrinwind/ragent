@@ -46,6 +46,7 @@ import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.infra.token.TokenCounterService;
 import com.nageoffer.ai.ragent.knowledge.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
+import com.nageoffer.ai.ragent.knowledge.service.ChunkImageResource;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -472,6 +473,21 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
             return;
         }
         chunkMapper.delete(new LambdaQueryWrapper<KnowledgeChunkDO>().eq(KnowledgeChunkDO::getDocId, docId));
+    }
+
+    @Override
+    public ChunkImageResource resolveImage(String chunkId) {
+        if (StrUtil.isBlank(chunkId)) {
+            return null;
+        }
+        KnowledgeChunkDO chunk = chunkMapper.selectById(chunkId);
+        if (chunk == null
+                || chunk.getContentType() != ChunkContentType.IMAGE
+                || StrUtil.isBlank(chunk.getImageUrl())) {
+            return null;
+        }
+        String mimeType = StrUtil.isBlank(chunk.getImageMimeType()) ? "image/png" : chunk.getImageMimeType();
+        return new ChunkImageResource(chunk.getImageUrl(), mimeType, "chunk-" + chunkId);
     }
 
     // ==================== 私有方法 ====================

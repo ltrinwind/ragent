@@ -98,9 +98,10 @@ public class ChatMessage {
     private Integer thinkingDuration;
 
     /**
-     * 检索到的上下文片段列表（仅 ASSISTANT 角色可能携带）
+     * 检索到的上下文片段列表（仅 ASSISTANT 角色可能携带）。
+     * 结构化条目，IMAGE 类型携带图片代理 URL；序列化为 JSON 字符串持久化到 t_message.contexts 列。
      */
-    private List<String> contexts;
+    private List<RetrievedContextItem> contexts;
 
     public ChatMessage(Role role, String content) {
         this.role = role;
