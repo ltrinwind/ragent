@@ -109,7 +109,7 @@ rag:
     max-error-length: 1000
 
   multimodal:
-    enabled: false
+    enabled: true
     max-images-per-document: 50
     image-min-size-kb: 5
     max-image-bytes: 4194304
@@ -212,16 +212,20 @@ ai:
         priority: 100
 
   vision:
-    default-model: qwen-vl-max
+    default-model: qwen3-vl-8b
     candidates:
+      - id: qwen3-vl-8b
+        provider: siliconflow
+        model: Qwen/Qwen3-VL-8B-Instruct
+        priority: 1
       - id: qwen-vl-max
         provider: bailian
         model: qwen-vl-max
-        priority: 1
+        priority: 2
       - id: qwen2.5-vl-local
         provider: ollama
         model: qwen2.5vl:7b
-        priority: 2
+        priority: 3
   url: http://localhost:9000
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}
   secret-access-key: ${RUSTFS_SECRET_KEY:rustfsadmin}
