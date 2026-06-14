@@ -392,7 +392,7 @@ CREATE TABLE t_ingestion_pipeline_node (
     id             VARCHAR(20)      NOT NULL PRIMARY KEY,
     pipeline_id    VARCHAR(20)      NOT NULL,
     node_id        VARCHAR(20) NOT NULL,
-    node_type      VARCHAR(16) NOT NULL,
+    node_type      VARCHAR(32) NOT NULL,
     next_node_id   VARCHAR(20),
     settings_json  JSONB,
     condition_json JSONB,

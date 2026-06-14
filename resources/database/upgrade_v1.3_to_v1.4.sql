@@ -17,3 +17,8 @@ ALTER TABLE t_knowledge_chunk
 COMMENT ON COLUMN t_knowledge_chunk.content_type IS '内容类型：TEXT/IMAGE';
 COMMENT ON COLUMN t_knowledge_chunk.image_url IS '图片对象存储地址';
 COMMENT ON COLUMN t_knowledge_chunk.image_mime_type IS '图片 MIME 类型';
+
+-- t_ingestion_pipeline_node.node_type 加宽：
+-- 多模态引入的 image_description(17 字符)超出原 VARCHAR(16)，扩到 VARCHAR(32) 留余量
+ALTER TABLE t_ingestion_pipeline_node
+  ALTER COLUMN node_type TYPE VARCHAR(32);
