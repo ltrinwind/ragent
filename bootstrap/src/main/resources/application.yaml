@@ -236,6 +236,13 @@ rustfs:
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}
   secret-access-key: ${RUSTFS_SECRET_KEY:rustfsadmin}
 
+# Tika 解析 PDF 时，PDFBox 扫描系统字体目录构建缓存、对未内嵌字体（如 STSong-Light）做回退，
+# 会刷大量无业务意义的 WARN。降到 ERROR 级静音（真正致命的 PDF 解析 ERROR 仍可见）。
+logging:
+  level:
+    org.apache.fontbox: ERROR
+    org.apache.pdfbox.pdmodel.font: ERROR
+
 sa-token:
   token-name: Authorization
   timeout: 2592000
