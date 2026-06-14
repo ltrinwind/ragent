@@ -71,6 +71,7 @@ const NODE_TYPE_OPTIONS = [
   { value: "enhancer", label: "enhancer" },
   { value: "chunker", label: "chunker" },
   { value: "enricher", label: "enricher" },
+  { value: "image_description", label: "image_description" },
   { value: "indexer", label: "indexer" }
 ];
 
@@ -147,6 +148,7 @@ type PipelineNodeType =
   | "enhancer"
   | "chunker"
   | "enricher"
+  | "image_description"
   | "indexer";
 
 interface EnhancerTaskForm {
@@ -944,6 +946,7 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
         }
         return Object.keys(payload).length ? payload : undefined;
       }
+      case "image_description":
       case "fetcher":
       default:
         return undefined;
@@ -1244,6 +1247,12 @@ function PipelineDialog({ open, mode, pipeline, onOpenChange, onSubmit }: Pipeli
                     {node.nodeType === "fetcher" ? (
                       <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
                         Fetcher 无额外配置
+                      </div>
+                    ) : null}
+
+                    {node.nodeType === "image_description" ? (
+                      <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                        图片描述节点无额外配置：是否启用、图片数量与大小限制由全局 rag.multimodal 设置控制。建议放在 chunker 与 indexer 之间。
                       </div>
                     ) : null}
 
