@@ -119,6 +119,9 @@ rag:
     vlm-timeout-seconds: 60
 
 ai:
+  # rerank 相关性分数下限（relevance_score ∈ [0,1]）：低于该值的 rerank 结果直接丢弃，
+  # 不再为凑满 topN 回填低相关候选。设为 0 表示不过滤。bge-reranker / qwen3-rerank 通用。
+  rerank-min-score: 0.3
   providers:
     ollama:
       url: http://localhost:11434

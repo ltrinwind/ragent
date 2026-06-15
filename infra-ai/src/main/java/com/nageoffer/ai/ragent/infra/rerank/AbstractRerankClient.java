@@ -62,9 +62,11 @@ import java.util.Set;
 public abstract class AbstractRerankClient implements RerankClient {
 
     protected final OkHttpClient httpClient;
+    protected final AIModelProperties aiModelProperties;
 
-    protected AbstractRerankClient(OkHttpClient httpClient) {
+    protected AbstractRerankClient(OkHttpClient httpClient, AIModelProperties aiModelProperties) {
         this.httpClient = httpClient;
+        this.aiModelProperties = aiModelProperties;
     }
 
     @Override
@@ -137,14 +139,26 @@ public abstract class AbstractRerankClient implements RerankClient {
     protected abstract JsonArray extractResults(JsonObject respJson);
 
     /**
-     * 按 index 把响应结果映射回原候选，填充 relevance_score，不足 topN 时按原顺序回填。
+     * 按 index 把响应结果映射回原候选，填充 relevance_score。
+     * <p>
      * SiliconFlow 与百炼的 result 元素均含 index 与 relevance_score，故可共享。
+     * <p>
+     * 过滤策略（取代旧的“凑满 topN 回填”）：
+     * <ul>
+     *   <li>丢弃 {@code relevance_score < minScore}（或缺失 relevance_score）的结果——以相关性下限把关；</li>
+     *   <li>topN 仅作为“最多保留 N 条”的硬上限，达标的有多少返回多少，宁缺毋滥；</li>
+     *   <li>不再为凑满 topN 而回填低相关候选。</li>
+     * </ul>
      */
     private List<RetrievedChunk> mapResults(List<RetrievedChunk> candidates, JsonArray results, int topN) {
+        double minScore = aiModelProperties.getRerankMinScore();
         List<RetrievedChunk> reranked = new ArrayList<>();
         Set<String> addedIds = new HashSet<>();
 
         for (JsonElement elem : results) {
+            if (reranked.size() >= topN) {
+                break;
+            }
             if (!elem.isJsonObject()) {
                 continue;
             }
@@ -159,11 +173,19 @@ public abstract class AbstractRerankClient implements RerankClient {
                 continue;
             }
 
-            RetrievedChunk src = candidates.get(idx);
-
             Float score = null;
             if (item.has("relevance_score") && !item.get("relevance_score").isJsonNull()) {
                 score = item.get("relevance_score").getAsFloat();
+            }
+
+            // 相关性下限过滤：开启过滤（minScore>0）时丢弃低于阈值或缺分的结果
+            if (minScore > 0 && (score == null || score < minScore)) {
+                continue;
+            }
+
+            RetrievedChunk src = candidates.get(idx);
+            if (!addedIds.add(src.getId())) {
+                continue;
             }
 
             RetrievedChunk hit = score != null ? RetrievedChunk.builder()
@@ -175,22 +197,6 @@ public abstract class AbstractRerankClient implements RerankClient {
                     .imageMimeType(src.getImageMimeType())
                     .build() : src;
             reranked.add(hit);
-            addedIds.add(src.getId());
-
-            if (reranked.size() >= topN) {
-                break;
-            }
-        }
-
-        if (reranked.size() < topN) {
-            for (RetrievedChunk c : candidates) {
-                if (addedIds.add(c.getId())) {
-                    reranked.add(c);
-                }
-                if (reranked.size() >= topN) {
-                    break;
-                }
-            }
         }
 
         return reranked;

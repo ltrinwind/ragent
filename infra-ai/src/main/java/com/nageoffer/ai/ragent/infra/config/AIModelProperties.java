@@ -62,6 +62,15 @@ public class AIModelProperties {
     private ModelGroup vision = new ModelGroup();
 
     /**
+     * Rerank 相关性分数下限（relevance_score，bge-reranker / qwen3-rerank 均归一到 [0,1]）。
+     * <p>
+     * rerank 返回结果中 relevance_score 低于该值的 chunk 直接丢弃——以“相关性下限”取代
+     * “凑满 topN 的回填”，从根上消除低相关内容混入最终 context。
+     * 设为 0 表示不过滤（仅按 topN 截断）。
+     */
+    private double rerankMinScore = 0.3;
+
+    /**
      * 模型选择策略配置
      */
     private Selection selection = new Selection();

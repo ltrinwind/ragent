@@ -20,6 +20,7 @@ package com.nageoffer.ai.ragent.infra.rerank;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.nageoffer.ai.ragent.framework.convention.RetrievedChunk;
+import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
 import com.nageoffer.ai.ragent.infra.enums.ModelProvider;
 import com.nageoffer.ai.ragent.infra.http.ModelClientErrorType;
 import com.nageoffer.ai.ragent.infra.http.ModelClientException;
@@ -49,8 +50,8 @@ import java.util.List;
 @Service
 public class SiliconFlowRerankClient extends AbstractRerankClient {
 
-    public SiliconFlowRerankClient(OkHttpClient syncHttpClient) {
-        super(syncHttpClient);
+    public SiliconFlowRerankClient(OkHttpClient syncHttpClient, AIModelProperties aiModelProperties) {
+        super(syncHttpClient, aiModelProperties);
     }
 
     @Override
