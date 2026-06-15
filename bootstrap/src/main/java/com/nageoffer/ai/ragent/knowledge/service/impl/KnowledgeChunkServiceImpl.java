@@ -41,10 +41,12 @@ import com.nageoffer.ai.ragent.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import com.nageoffer.ai.ragent.infra.embedding.EmbeddingService;
 import com.nageoffer.ai.ragent.infra.token.TokenCounterService;
 import com.nageoffer.ai.ragent.knowledge.enums.DocumentStatus;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
+import com.nageoffer.ai.ragent.knowledge.service.ChunkImageResource;
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeChunkService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -131,6 +133,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                 .charCount(charCount)
                 .tokenCount(tokenCount)
                 .parentId(requestParam.getParentId())
+                .contentType(ChunkContentType.fromValue(requestParam.getContentType()))
+                .imageUrl(requestParam.getImageUrl())
+                .imageMimeType(requestParam.getImageMimeType())
                 .enabled(1)
                 .createdBy(UserContext.getUsername())
                 .updatedBy(UserContext.getUsername())
@@ -209,6 +214,9 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                     .tokenCount(resolveTokenCount(content))
                     .enabled(1)
                     .parentId(request.getParentId())
+                    .contentType(ChunkContentType.fromValue(request.getContentType()))
+                    .imageUrl(request.getImageUrl())
+                    .imageMimeType(request.getImageMimeType())
                     .createdBy(username)
                     .updatedBy(username)
                     .build();
@@ -465,6 +473,21 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
             return;
         }
         chunkMapper.delete(new LambdaQueryWrapper<KnowledgeChunkDO>().eq(KnowledgeChunkDO::getDocId, docId));
+    }
+
+    @Override
+    public ChunkImageResource resolveImage(String chunkId) {
+        if (StrUtil.isBlank(chunkId)) {
+            return null;
+        }
+        KnowledgeChunkDO chunk = chunkMapper.selectById(chunkId);
+        if (chunk == null
+                || chunk.getContentType() != ChunkContentType.IMAGE
+                || StrUtil.isBlank(chunk.getImageUrl())) {
+            return null;
+        }
+        String mimeType = StrUtil.isBlank(chunk.getImageMimeType()) ? "image/png" : chunk.getImageMimeType();
+        return new ChunkImageResource(chunk.getImageUrl(), mimeType, "chunk-" + chunkId);
     }
 
     // ==================== 私有方法 ====================

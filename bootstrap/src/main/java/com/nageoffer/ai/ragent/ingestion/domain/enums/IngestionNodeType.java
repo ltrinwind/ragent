@@ -57,7 +57,12 @@ public enum IngestionNodeType {
     /**
      * 索引节点 - 将文本块向量化并存储到向量数据库
      */
-    INDEXER("indexer");
+    INDEXER("indexer"),
+
+    /**
+     * 图片描述节点 - 使用VLM对图片生成文本描述
+     */
+    IMAGE_DESCRIPTION("image_description");
 
     /**
      * 节点类型的字符串值（小写 snake_case）

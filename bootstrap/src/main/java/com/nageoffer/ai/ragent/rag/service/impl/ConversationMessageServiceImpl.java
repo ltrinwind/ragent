@@ -20,8 +20,12 @@ package com.nageoffer.ai.ragent.rag.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.nageoffer.ai.ragent.framework.convention.RetrievedContextItem;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import com.nageoffer.ai.ragent.rag.controller.vo.ConversationMessageVO;
 import com.nageoffer.ai.ragent.rag.dao.entity.ConversationDO;
 import com.nageoffer.ai.ragent.rag.dao.entity.ConversationMessageDO;
@@ -121,13 +125,32 @@ public class ConversationMessageServiceImpl implements ConversationMessageServic
         return result;
     }
 
-    @SuppressWarnings("unchecked")
-    private List<String> parseContexts(String contextsJson) {
+    /**
+     * 解析持久化的 contexts JSON 列，兼容两种历史形态：
+     * <ul>
+     *   <li>新数据：{@code [{"id":..,"text":..,"contentType":"IMAGE","imageUrl":..}]} → 逐元素映射 RetrievedContextItem</li>
+     *   <li>旧数据：{@code ["纯文本"]} 字符串数组 → 每个字符串包成 {@code {text, contentType:"TEXT"}} 条目</li>
+     * </ul>
+     * 逐元素判类型而非整体 toList，避免旧数据被异常 catch 成 null 而丢失。
+     */
+    private List<RetrievedContextItem> parseContexts(String contextsJson) {
         if (StrUtil.isBlank(contextsJson)) {
             return null;
         }
         try {
-            return JSONUtil.toList(contextsJson, String.class);
+            JSONArray array = JSONUtil.parseArray(contextsJson);
+            List<RetrievedContextItem> result = new ArrayList<>(array.size());
+            for (Object element : array) {
+                if (element instanceof JSONObject obj) {
+                    result.add(obj.toBean(RetrievedContextItem.class));
+                } else if (element != null) {
+                    result.add(RetrievedContextItem.builder()
+                            .text(String.valueOf(element))
+                            .contentType(ChunkContentType.TEXT.getValue())
+                            .build());
+                }
+            }
+            return result;
         } catch (Exception e) {
             return null;
         }

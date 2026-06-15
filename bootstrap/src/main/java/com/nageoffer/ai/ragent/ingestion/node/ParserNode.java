@@ -87,6 +87,11 @@ public class ParserNode implements IngestionNode {
         ParseResult result = parser.parse(context.getRawBytes(), mimeType, options);
         context.setRawText(result.text());
 
+        // 将提取的图片写入 context（供后续 ImageDescriptionNode 使用）
+        if (result.images() != null && !result.images().isEmpty()) {
+            context.setExtractedImages(result.images());
+        }
+
         // 将 ParseResult 转换为 StructuredDocument
         StructuredDocument document = StructuredDocument.builder()
                 .text(result.text())
@@ -94,7 +99,11 @@ public class ParserNode implements IngestionNode {
                 .build();
         context.setDocument(document);
 
-        return NodeResult.ok("解析文本长度=" + (result.text() == null ? 0 : result.text().length()));
+        String msg = "解析文本长度=" + (result.text() == null ? 0 : result.text().length());
+        if (result.images() != null && !result.images().isEmpty()) {
+            msg += "，提取图片=" + result.images().size() + "张";
+        }
+        return NodeResult.ok(msg);
     }
 
     /**

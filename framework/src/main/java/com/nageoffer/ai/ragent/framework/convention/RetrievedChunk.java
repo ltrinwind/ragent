@@ -51,4 +51,20 @@ public class RetrievedChunk {
      * 数值越大表示与查询的相关性越高
      */
     private Float score;
+
+    /**
+     * 内容类型：TEXT 或 IMAGE
+     */
+    private String contentType;
+
+    /**
+     * 图片对象存储地址（仅 IMAGE 类型有效）
+     * 内部对象地址，不建议前端直接使用
+     */
+    private String imageUrl;
+
+    /**
+     * 图片 MIME 类型（仅 IMAGE 类型有效）
+     */
+    private String imageMimeType;
 }

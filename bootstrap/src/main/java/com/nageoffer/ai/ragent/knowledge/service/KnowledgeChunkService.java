@@ -124,4 +124,15 @@ public interface KnowledgeChunkService {
      * @param docId 文档 ID
      */
     void deleteByDocId(String docId);
+
+    /**
+     * 解析指定 chunk 的可服务图片资源（图片代理端点使用）。
+     * <p>
+     * 仅当 chunk 为 IMAGE 类型且存在 imageUrl 时返回，并完成 MIME 兜底等业务决策；
+     * 其余情况（不存在 / 非图片 / 无图）返回 null，由调用方决定如何响应。
+     *
+     * @param chunkId chunk ID
+     * @return 图片资源信息；不可服务时返回 null
+     */
+    ChunkImageResource resolveImage(String chunkId);
 }

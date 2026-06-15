@@ -1,11 +1,14 @@
 import * as React from "react";
-import { Brain, ChevronDown, FileText } from "lucide-react";
+import { Brain, ChevronDown, FileText, ImageIcon } from "lucide-react";
 
 import { FeedbackButtons } from "@/components/chat/FeedbackButtons";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types";
+
+/** 图片代理端点的前端基础地址，与知识库文档预览（KnowledgeDocumentsPage）拼法一致 */
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 interface MessageItemProps {
   message: Message;
@@ -123,9 +126,29 @@ export const MessageItem = React.memo(function MessageItem({ message, isLast }: 
                         <span className="mb-1 block text-xs font-medium text-[#2563EB]">
                           #{idx + 1}
                         </span>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#1E40AF]">
-                          {ctx}
-                        </p>
+                        {ctx.contentType === "IMAGE" && ctx.imageUrl ? (
+                          <div className="space-y-2">
+                            <span className="inline-flex items-center gap-1 rounded bg-[#BFDBFE] px-1.5 py-0.5 text-[11px] text-[#2563EB]">
+                              <ImageIcon className="h-3 w-3" />
+                              图片
+                            </span>
+                            <img
+                              src={`${API_BASE_URL}${ctx.imageUrl}`}
+                              alt={ctx.text || "参考图片"}
+                              className="max-w-full rounded-lg"
+                              loading="lazy"
+                            />
+                            {ctx.text ? (
+                              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#1E40AF]">
+                                {ctx.text}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#1E40AF]">
+                            {ctx.text}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

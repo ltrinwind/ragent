@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.core.chunk;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -56,6 +57,22 @@ public class VectorChunk {
      */
     @Builder.Default
     private Map<String, Object> metadata = new HashMap<>();
+
+    /**
+     * 内容类型：TEXT 或 IMAGE
+     */
+    @Builder.Default
+    private ChunkContentType contentType = ChunkContentType.TEXT;
+
+    /**
+     * 图片对象存储地址（仅 IMAGE 类型有效）
+     */
+    private String imageUrl;
+
+    /**
+     * 图片 MIME 类型（仅 IMAGE 类型有效）
+     */
+    private String imageMimeType;
 
     /**
      * 父块ID（父子分块模式下，子块指向其所属父块）

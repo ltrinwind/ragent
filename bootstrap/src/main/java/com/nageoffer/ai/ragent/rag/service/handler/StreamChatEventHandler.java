@@ -25,6 +25,7 @@ import com.nageoffer.ai.ragent.rag.dto.MetaPayload;
 import com.nageoffer.ai.ragent.rag.enums.SSEEventType;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.convention.ChatMessage;
+import com.nageoffer.ai.ragent.framework.convention.RetrievedContextItem;
 import com.nageoffer.ai.ragent.framework.web.SseEmitterSender;
 import com.nageoffer.ai.ragent.infra.chat.StreamCallback;
 import com.nageoffer.ai.ragent.infra.config.AIModelProperties;
@@ -53,7 +54,7 @@ public class StreamChatEventHandler implements StreamCallback {
     private final boolean sendTitleOnComplete;
     private final StringBuilder answer = new StringBuilder();
     private final StringBuilder thinking = new StringBuilder();
-    private List<String> retrievedContexts;
+    private List<RetrievedContextItem> retrievedContexts;
     private long thinkingStartMs;
     private int thinkingDurationSeconds;
 
@@ -158,12 +159,12 @@ public class StreamChatEventHandler implements StreamCallback {
     }
 
     @Override
-    public void onContext(List<String> chunks) {
+    public void onContext(List<RetrievedContextItem> items) {
         if (taskManager.isCancelled(taskId)) {
             return;
         }
-        this.retrievedContexts = chunks;
-        sender.sendEvent(SSEEventType.CONTEXT.value(), Map.of("contexts", chunks));
+        this.retrievedContexts = items;
+        sender.sendEvent(SSEEventType.CONTEXT.value(), Map.of("contexts", items));
     }
 
     @Override

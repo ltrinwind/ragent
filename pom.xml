@@ -202,6 +202,30 @@
                 </executions>
             </plugin>
 
+            <!-- JaCoCo：prepare-agent 在 initialize 阶段写入 argLine 属性，
+                 供 surefire 的 @{argLine} 解析（此前因缺少该插件导致 @{argLine} 原样透传，fork 失败）；
+                 report 在 verify 阶段生成覆盖率报告（target/site/jacoco/） -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>

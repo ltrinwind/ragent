@@ -18,6 +18,7 @@
 package com.nageoffer.ai.ragent.ingestion.domain.context;
 
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionStatus;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorSpaceId;
 import lombok.AllArgsConstructor;
@@ -77,6 +78,17 @@ public class IngestionContext {
      * 文档切分后的文本块列表
      */
     private List<VectorChunk> chunks;
+
+    /**
+     * 从文档中提取的嵌入图片列表
+     */
+    private List<ExtractedImage> extractedImages;
+
+    /**
+     * 知识库指定的 embedding 模型（用于 Pipeline 模式透传）
+     * 为 null 时使用默认 embedding 模型
+     */
+    private String embeddingModel;
 
     /**
      * 经过增强处理后的文本内容

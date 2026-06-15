@@ -96,6 +96,8 @@ rag:
       vector-global:
         confidence-threshold: 0.6
         top-k-multiplier: 3
+        # 余弦相似度下限：低于该分的向量召回结果在 SQL 源头丢弃，不进入后续 RRF/Rerank
+        score-threshold: 0.5
       intent-directed:
         enabled: true
         min-intent-score: 0.4
@@ -112,31 +114,47 @@ rag:
     enabled: true
     max-error-length: 1000
 
+  multimodal:
+    enabled: true
+    max-images-per-document: 50
+    image-min-size-kb: 5
+    max-image-bytes: 4194304
+    vlm-concurrency: 4
+    vlm-timeout-seconds: 60
+
 ai:
+  # rerank 相关性分数下限（relevance_score ∈ [0,1]）：低于该值的 rerank 结果直接丢弃，
+  # 不再为凑满 topN 回填低相关候选。设为 0 表示不过滤。bge-reranker / qwen3-rerank 通用。
+  rerank-min-score: 0.3
   providers:
     ollama:
       url: http://localhost:11434
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        vision: /v1/chat/completions
     bailian:
       url: https://dashscope.aliyuncs.com
       api-key: ${BAILIAN_API_KEY:}
       endpoints:
         chat: /compatible-mode/v1/chat/completions
         rerank: /api/v1/services/rerank/text-rerank/text-rerank
+        vision: /compatible-mode/v1/chat/completions
     aihubmix:
       url: https://aihubmix.com
       api-key: ${AIHUBMIX_API_KEY:}
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        vision: /v1/chat/completions
     siliconflow:
       url: https://api.siliconflow.cn
       api-key: ${SILICONFLOW_API_KEY:}
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
+        rerank: /v1/rerank
+        vision: /v1/chat/completions
 
   selection:
     failure-threshold: 2
@@ -146,12 +164,12 @@ ai:
     message-chunk-size: 1
 
   chat:
-    default-model: qwen3-max
+    default-model: qwen3.6-plus
     deep-thinking-model: qwen3-max
     candidates:
-      - id: qwen-plus
+      - id: qwen3.6-plus
         provider: bailian
-        model: qwen-plus-latest
+        model: qwen3.6-plus
         priority: 1
       - id: qwen3-local
         provider: ollama
@@ -192,21 +210,47 @@ ai:
         priority: 3
 
   rerank:
-    default-model: qwen3-rerank
+    default-model: bge-reranker-v2-m3
     candidates:
+      - id: bge-reranker-v2-m3
+        provider: siliconflow
+        model: BAAI/bge-reranker-v2-m3
+        priority: 1
       - id: qwen3-rerank
         provider: bailian
         model: qwen3-rerank
-        priority: 1
+        priority: 2
       - id: rerank-noop
         provider: noop
         model: noop
         priority: 100
 
+  vision:
+    default-model: qwen3-vl-8b
+    candidates:
+      - id: qwen3-vl-8b
+        provider: siliconflow
+        model: Qwen/Qwen3-VL-8B-Instruct
+        priority: 1
+      - id: qwen-vl-max
+        provider: bailian
+        model: qwen-vl-max
+        priority: 2
+      - id: qwen2.5-vl-local
+        provider: ollama
+        model: qwen2.5vl:7b
+        priority: 3
 rustfs:
   url: http://localhost:9000
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}
   secret-access-key: ${RUSTFS_SECRET_KEY:rustfsadmin}
+
+# Tika 解析 PDF 时，PDFBox 扫描系统字体目录构建缓存、对未内嵌字体（如 STSong-Light）做回退，
+# 会刷大量无业务意义的 WARN。降到 ERROR 级静音（真正致命的 PDF 解析 ERROR 仍可见）。
+logging:
+  level:
+    org.apache.fontbox: ERROR
+    org.apache.pdfbox.pdmodel.font: ERROR
 
 sa-token:
   token-name: Authorization

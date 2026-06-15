@@ -68,7 +68,7 @@ public class ChunkerNode implements IngestionNode {
         ChunkPostResult postResult = postProcessor.process(results, context);
 
         // 嵌入：只对需要嵌入的 chunks 生成向量
-        chunkEmbeddingService.embed(postResult.getChunksToEmbed(), null);
+        chunkEmbeddingService.embed(postResult.getChunksToEmbed(), context.getEmbeddingModel());
 
         context.setChunks(postResult.getContextChunks());
         return NodeResult.ok(postResult.getSummary());

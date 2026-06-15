@@ -157,23 +157,29 @@ CREATE INDEX idx_kb_id ON t_knowledge_document (kb_id);
 COMMENT ON TABLE t_knowledge_document IS '知识库文档表';
 
 CREATE TABLE t_knowledge_chunk (
-    id           VARCHAR(20)      NOT NULL PRIMARY KEY,
-    kb_id        VARCHAR(20)      NOT NULL,
-    doc_id       VARCHAR(20)      NOT NULL,
-    chunk_index  INTEGER     NOT NULL,
-    content      TEXT        NOT NULL,
-    content_hash VARCHAR(64),
-    char_count   INTEGER,
-    token_count  INTEGER,
-    enabled      SMALLINT    NOT NULL DEFAULT 1,
-    created_by   VARCHAR(20) NOT NULL,
-    updated_by   VARCHAR(20),
-    create_time  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    update_time  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted      SMALLINT    NOT NULL DEFAULT 0
+    id               VARCHAR(20)      NOT NULL PRIMARY KEY,
+    kb_id            VARCHAR(20)      NOT NULL,
+    doc_id           VARCHAR(20)      NOT NULL,
+    chunk_index      INTEGER     NOT NULL,
+    content          TEXT        NOT NULL,
+    content_hash     VARCHAR(64),
+    char_count       INTEGER,
+    token_count      INTEGER,
+    enabled          SMALLINT    NOT NULL DEFAULT 1,
+    content_type     VARCHAR(20) NOT NULL DEFAULT 'TEXT',
+    image_url        TEXT,
+    image_mime_type  VARCHAR(100),
+    created_by       VARCHAR(20) NOT NULL,
+    updated_by       VARCHAR(20),
+    create_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted          SMALLINT    NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_doc_id ON t_knowledge_chunk (doc_id);
 COMMENT ON TABLE t_knowledge_chunk IS '知识库文档分块表';
+COMMENT ON COLUMN t_knowledge_chunk.content_type IS '内容类型：TEXT/IMAGE';
+COMMENT ON COLUMN t_knowledge_chunk.image_url IS '图片对象存储地址';
+COMMENT ON COLUMN t_knowledge_chunk.image_mime_type IS '图片 MIME 类型';
 
 -- 父子分块：父块表
 CREATE TABLE t_knowledge_chunk_parent (
@@ -386,7 +392,7 @@ CREATE TABLE t_ingestion_pipeline_node (
     id             VARCHAR(20)      NOT NULL PRIMARY KEY,
     pipeline_id    VARCHAR(20)      NOT NULL,
     node_id        VARCHAR(20) NOT NULL,
-    node_type      VARCHAR(16) NOT NULL,
+    node_type      VARCHAR(32) NOT NULL,
     next_node_id   VARCHAR(20),
     settings_json  JSONB,
     condition_json JSONB,
