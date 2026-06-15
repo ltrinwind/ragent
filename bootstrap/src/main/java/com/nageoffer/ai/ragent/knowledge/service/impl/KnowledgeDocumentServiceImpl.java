@@ -120,7 +120,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeScheduleProperties scheduleProperties;
     private final RemoteFileFetcher remoteFileFetcher;
 
-    @Value("knowledge-document-chunk_topic${unique-name:}")
+    @Value("knowledge-document-chunk_topic")
     private String chunkTopic;
 
     @Override

@@ -5,7 +5,7 @@ server:
 
 spring:
   application:
-    name: ragent${unique-name:}-service
+    name: ragent-service
 
   servlet:
     multipart:
@@ -35,7 +35,7 @@ spring:
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
   producer:
-    group: ragent-producer${unique-name:}_pg
+    group: ragent-producer_pg
     send-message-timeout: 2000
 
 milvus:
@@ -52,6 +52,9 @@ rag:
     sse-timeout-ms: 300000  # SSE 全局超时（毫秒），默认 5 分钟
 
   query-rewrite:
+    enabled: true
+
+  rerank:
     enabled: true
 
   rate-limit:
@@ -96,6 +99,7 @@ rag:
         # 余弦相似度下限：低于该分的向量召回结果在 SQL 源头丢弃，不进入后续 RRF/Rerank
         score-threshold: 0.5
       intent-directed:
+        enabled: true
         min-intent-score: 0.4
         top-k-multiplier: 2
       keyword-bm25:
