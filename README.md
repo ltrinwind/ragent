@@ -82,6 +82,26 @@ Ragent 是一个企业级 Agentic RAG 平台，覆盖从文档入库到智能问
 
 **意义**：实现检索结果的可追溯性，用户可直观验证回答依据，提升系统透明度和信任度。
 
+### 5. 多模态文档嵌入与参考来源图片展示
+
+**动机**：原系统仅处理文本，PDF/PPT 中的图表、截图等图片信息在解析阶段被丢弃，用户无法通过自然语言查询图表中的数据；同时第 4 节的参考来源面板只能展示纯文本，命中的图片无法直观呈现。
+
+**实现**：打通「图片进得来、出得去」的完整链路，分摄取与推送两段。
+
+**摄取侧（图片 → 描述 → 入库）**：
+- 视觉模型独立服务层：参照 embedding/rerank 模式新增 `VisionClient` → `RoutingVisionService` → `ai.vision` ModelGroup 路由链，三态熔断 + 自动降级，提供 Bailian/Ollama/SiliconFlow/AIHubMix 四个 Provider，不侵入现有 ChatMessage/ChatClient
+- Tika 图片提取：自定义 `EmbeddedDocumentExtractor` 收集 PDF 内嵌图片，按大小、数量、hash 三重过滤去重
+- Pipeline 新增 `ImageDescriptionNode`：读取提取的图片 → 上传 RustFS → VLM 以 base64 data URI 生成描述 → 构造 `contentType=IMAGE` 的 VectorChunk → 复用现有文本 Embedding 入库
+- 统一数据模型：`VectorChunk`/`RetrievedChunk`/`KnowledgeChunkDO` 增加 `contentType`/`imageUrl`/`imageMimeType`，`t_knowledge_chunk` 表新增对应列（`upgrade_v1.3_to_v1.4.sql`）；`PgRetrieverService` 向量检索 JOIN chunk 表回带图片字段，BM25 全文检索同步补充
+
+**检索推送侧（结构化 context + 图片代理）**：
+- 在第 4 节的 SSE `context` 事件基础上，将载荷由 `string[]` 升级为结构化 `RetrievedContextItem`（id/text/contentType/imageUrl/score），命中 IMAGE chunk 时附带图片代理 URL，前端按命中顺序与文本交错渲染
+- 新增 `GET /knowledge-base/chunks/{chunkId}/image` 图片代理端点：凭 chunk id 回库取对象存储地址再 `openStream`，**不向前端外泄 s3:// 内部地址**；业务逻辑下沉 service，路径常量集中到 `ChunkImageEndpoint` 枚举
+- 持久化 contexts 同步升级为结构化（同列 JSON，零 schema 改动），`parseContexts` 兼容历史 `string[]` 数据回退为 TEXT 条目
+- 修复 `ForwardingStreamCallback` 未转发 `onContext` 的 bug：trace 装饰路径下参考来源事件此前被静默吞掉
+
+**意义**：文档中的图表、表格、截图等视觉信息不再丢失，RAG 覆盖文档全量语义；命中图片时参考来源面板直接展示缩略图 + 描述，从纯文本进化为图文交错。视觉模型独立路由，故障不影响 Chat/Embedding 等其他链路。
+
 
 ## 未来计划
 
@@ -96,20 +116,6 @@ Ragent 是一个企业级 Agentic RAG 平台，覆盖从文档入库到智能问
 
 
 **预期收益**：系统管控与业务语义解耦，sys_metadata 保证安全合规（权限、过期），biz_metadata 提升检索精度（结构化过滤）。admin 可按业务场景动态配置 schema。
-
-### 多模态文档嵌入
-
-**动机**：当前系统仅处理文档中的文本内容，PDF/PPT 中的图表、截图等图片信息在解析阶段被丢弃。用户上传包含营收柱状图、业务占比饼图等可视化数据的文档后，无法通过自然语言查询图表中的具体数据。
-
-**规划**：通过 VLM（视觉语言模型）将文档中的图片转化为结构化文字描述，描述作为 chunk content 参与嵌入与检索。仅在 Pipeline 模式下生效，Chunk 模式保持不变，暂不适配 Milvus。
-
-- **视觉模型独立服务层**：参照 embedding/rerank 模式，新增 `VisionClient` → `RoutingVisionService` → `ai.vision` ModelGroup 的完整路由链路，支持三态熔断与自动降级，不修改现有 ChatMessage/ChatClient。提供 Bailian、Ollama、SiliconFlow、AIHubMix 四个 Provider 实现
-- **Tika 图片提取**：自定义 `EmbeddedDocumentExtractor` 收集 PDF 内嵌图片，按大小、数量、hash 去重三重过滤
-- **Pipeline 新增节点**：`ImageDescriptionNode` 读取提取图片 → 上传 RustFS 对象存储 → VLM 以 base64 data URI 调用生成描述 → 构造 `contentType=IMAGE` 的 VectorChunk → 走现有文本 Embedding 入库
-- **检索增强**：`PgRetrieverService` 向量检索 JOIN `t_knowledge_chunk` 返回图片 URL 和 MIME 类型，BM25 全文检索同步补充多模态字段
-- **数据模型扩展**：`VectorChunk`、`RetrievedChunk`、`KnowledgeChunkDO` 等统一增加 `contentType`/`imageUrl`/`imageMimeType` 字段，数据库 `t_knowledge_chunk` 表新增对应列
-
-**预期收益**：文档中的图表、表格、截图等视觉信息不再丢失，RAG 系统覆盖文档全量语义。视觉模型独立管理，故障不影响 Chat/Embedding 等其他模型链路。
 
 
 ## 贡献
