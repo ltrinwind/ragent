@@ -36,12 +36,10 @@ import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.StructuredChunkingService;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
-import com.nageoffer.ai.ragent.core.image.ImageProcessingService;
 import com.nageoffer.ai.ragent.core.image.MultimodalChunkEnrichmentService;
 import com.nageoffer.ai.ragent.core.parser.BlockTextRenderer;
 import com.nageoffer.ai.ragent.core.parser.DocumentParser;
 import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
-import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
 import com.nageoffer.ai.ragent.core.parser.model.ParsedDocument;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
@@ -81,7 +79,6 @@ import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentScheduleServic
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentService;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorSpaceId;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
-import com.nageoffer.ai.ragent.rag.config.RagMultimodalProperties;
 import com.nageoffer.ai.ragent.rag.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.rag.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
@@ -94,7 +91,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -114,8 +110,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final DocumentParserSelector parserSelector;
     private final StructuredChunkingService structuredChunkingService;
     private final MultimodalChunkEnrichmentService multimodalChunkEnrichmentService;
-    private final ImageProcessingService imageProcessingService;
-    private final RagMultimodalProperties multimodalProperties;
     private final FileStorageService fileStorageService;
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
@@ -361,7 +355,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             long chunkStart = System.currentTimeMillis();
             List<VectorChunk> chunks = structuredChunkingService.chunk(
                     parsed.blocks(), text, chunkingMode, config, null);
-            chunks = appendExtractedImageChunks(chunks, parsed, kbDO.getCollectionName());
             long chunkDuration = System.currentTimeMillis() - chunkStart;
             if (chunks.isEmpty()) {
                 throw new RuntimeException("分块结果为空：docId=" + documentDO.getId());
@@ -383,33 +376,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     private record ChunkProcessResult(List<VectorChunk> chunks, long extractDuration, long chunkDuration,
                                       long embedDuration) {
-    }
-
-    private List<VectorChunk> appendExtractedImageChunks(List<VectorChunk> chunks, ParsedDocument parsed,
-                                                         String bucketName) {
-        List<ExtractedImage> images = extractImages(parsed.metadata().get("extractedImages"));
-        if (!multimodalProperties.isEnabled() || images.isEmpty()) {
-            return chunks;
-        }
-        ImageProcessingService.ProcessResult result =
-                imageProcessingService.processImages(images, chunks.size(), bucketName);
-        if (result.chunks().isEmpty()) {
-            return chunks;
-        }
-        List<VectorChunk> merged = new ArrayList<>(chunks.size() + result.chunks().size());
-        merged.addAll(chunks);
-        merged.addAll(result.chunks());
-        return merged;
-    }
-
-    private List<ExtractedImage> extractImages(Object value) {
-        if (!(value instanceof List<?> list) || list.isEmpty()) {
-            return List.of();
-        }
-        return list.stream()
-                .filter(ExtractedImage.class::isInstance)
-                .map(ExtractedImage.class::cast)
-                .toList();
     }
 
     private record ProcessModeConfig(ProcessMode processMode, ChunkingMode chunkingMode, String chunkConfig,

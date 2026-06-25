@@ -26,9 +26,7 @@ import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.StructuredChunkingService;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
-import com.nageoffer.ai.ragent.core.image.ImageProcessingService;
 import com.nageoffer.ai.ragent.core.image.MultimodalChunkEnrichmentService;
-import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
 import com.nageoffer.ai.ragent.core.parser.model.Block;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
@@ -36,12 +34,10 @@ import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import com.nageoffer.ai.ragent.ingestion.domain.result.NodeResult;
 import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
-import com.nageoffer.ai.ragent.rag.config.RagMultimodalProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -57,8 +53,6 @@ public class ChunkerNode implements IngestionNode {
     private final ChunkEmbeddingService chunkEmbeddingService;
     private final StructuredChunkingService structuredChunkingService;
     private final MultimodalChunkEnrichmentService multimodalChunkEnrichmentService;
-    private final ImageProcessingService imageProcessingService;
-    private final RagMultimodalProperties multimodalProperties;
 
     @Override
     public String getNodeType() {
@@ -85,7 +79,6 @@ public class ChunkerNode implements IngestionNode {
         if (chunks.isEmpty()) {
             return NodeResult.fail(new ClientException(hasBlocks ? "分块结果为空" : "可分块文本为空"));
         }
-        chunks = appendExtractedImageChunks(chunks, context);
 
         // 后处理：由策略自身决定如何处理分块结果（如父子分块需要拆分父/子块）
         ChunkPostProcessor postProcessor = chunkingMode.getPostProcessor();
@@ -97,26 +90,6 @@ public class ChunkerNode implements IngestionNode {
 
         context.setChunks(postResult.getContextChunks());
         return NodeResult.ok(postResult.getSummary() + ", path=" + (hasBlocks ? "block-aware" : "legacy-text"));
-    }
-
-    private List<VectorChunk> appendExtractedImageChunks(List<VectorChunk> chunks, IngestionContext context) {
-        List<ExtractedImage> images = context.getExtractedImages();
-        if (!multimodalProperties.isEnabled() || images == null || images.isEmpty()) {
-            return chunks;
-        }
-        String bucketName = context.getVectorSpaceId() != null
-                ? context.getVectorSpaceId().getLogicalName()
-                : "knowledge";
-        ImageProcessingService.ProcessResult result =
-                imageProcessingService.processImages(images, chunks.size(), bucketName);
-        context.setExtractedImages(List.of());
-        if (result.chunks().isEmpty()) {
-            return chunks;
-        }
-        List<VectorChunk> merged = new ArrayList<>(chunks.size() + result.chunks().size());
-        merged.addAll(chunks);
-        merged.addAll(result.chunks());
-        return merged;
     }
 
     private ChunkerSettings parseSettings(JsonNode node) {

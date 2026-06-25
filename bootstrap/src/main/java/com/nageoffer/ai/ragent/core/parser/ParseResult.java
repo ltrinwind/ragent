@@ -17,7 +17,6 @@
 
 package com.nageoffer.ai.ragent.core.parser;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,28 +24,20 @@ import java.util.Map;
  *
  * @param text     解析后的文本内容
  * @param metadata 文档元数据（可选）
- * @param images   从文档中提取的嵌入图片列表（可选）
  */
-public record ParseResult(String text, Map<String, Object> metadata, List<ExtractedImage> images) {
+public record ParseResult(String text, Map<String, Object> metadata) {
 
     /**
      * 创建只包含文本的解析结果
      */
     public static ParseResult ofText(String text) {
-        return new ParseResult(text, Map.of(), List.of());
+        return new ParseResult(text, Map.of());
     }
 
     /**
-     * 创建包含文本和元数据的解析结果（无图片）
+     * 创建包含文本和元数据的解析结果
      */
     public static ParseResult of(String text, Map<String, Object> metadata) {
-        return new ParseResult(text, metadata != null ? metadata : Map.of(), List.of());
-    }
-
-    /**
-     * 创建包含文本、元数据和图片的解析结果
-     */
-    public static ParseResult of(String text, Map<String, Object> metadata, List<ExtractedImage> images) {
-        return new ParseResult(text, metadata != null ? metadata : Map.of(), images != null ? images : List.of());
+        return new ParseResult(text, metadata != null ? metadata : Map.of());
     }
 }

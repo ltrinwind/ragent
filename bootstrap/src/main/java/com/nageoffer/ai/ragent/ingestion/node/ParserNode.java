@@ -22,7 +22,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nageoffer.ai.ragent.core.parser.BlockTextRenderer;
 import com.nageoffer.ai.ragent.core.parser.DocumentParser;
 import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
-import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
 import com.nageoffer.ai.ragent.core.parser.model.AssetRef;
 import com.nageoffer.ai.ragent.core.parser.model.Block;
 import com.nageoffer.ai.ragent.core.parser.model.ImageBlock;
@@ -108,11 +107,6 @@ public class ParserNode implements IngestionNode {
         String renderedText = BlockTextRenderer.render(blocks);
         context.setRawText(renderedText);
 
-        List<ExtractedImage> extractedImages = extractImages(parsed.metadata().get("extractedImages"));
-        if (!extractedImages.isEmpty()) {
-            context.setExtractedImages(extractedImages);
-        }
-
         List<AssetRef> assets = blocks.stream()
                 .filter(ImageBlock.class::isInstance)
                 .map(ImageBlock.class::cast)
@@ -130,18 +124,8 @@ public class ParserNode implements IngestionNode {
                 .build();
         context.setDocument(document);
 
-        return NodeResult.ok(String.format("解析器=%s, blocks=%d, 文本长度=%d, 提取图片=%d, assets=%d",
-                parser.getParserType(), blocks.size(), renderedText.length(), extractedImages.size(), assets.size()));
-    }
-
-    private List<ExtractedImage> extractImages(Object value) {
-        if (!(value instanceof List<?> list) || list.isEmpty()) {
-            return List.of();
-        }
-        return list.stream()
-                .filter(ExtractedImage.class::isInstance)
-                .map(ExtractedImage.class::cast)
-                .toList();
+        return NodeResult.ok(String.format("解析器=%s, blocks=%d, 文本长度=%d, assets=%d",
+                parser.getParserType(), blocks.size(), renderedText.length(), assets.size()));
     }
 
     /**

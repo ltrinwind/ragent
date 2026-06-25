@@ -97,7 +97,7 @@ public class MinerUDocumentParser implements DocumentParser {
 
     @Override
     public boolean supports(String mimeType) {
-        if (!properties.isEnabled() || mimeType == null) {
+        if (mimeType == null) {
             return false;
         }
         String lower = mimeType.toLowerCase(Locale.ROOT);

@@ -256,7 +256,6 @@ logging:
 
 # MinerU SaaS API 配置（PDF / Word / PPT 走 MinerU 解析）
 mineru:
-  enabled: false
   api-url: https://mineru.net/api/v4
   api-key: ${MINERU_API_KEY:}
   poll-interval-seconds: 5

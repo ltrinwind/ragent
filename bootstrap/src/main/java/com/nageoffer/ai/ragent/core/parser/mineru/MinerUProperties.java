@@ -32,11 +32,6 @@ import org.springframework.context.annotation.Configuration;
 public class MinerUProperties {
 
     /**
-     * 是否启用 MinerU 解析器。默认关闭，避免未配置 API key 时抢占 PDF/Office 本地解析链路。
-     */
-    private boolean enabled = false;
-
-    /**
      * MinerU SaaS API 根地址，默认 <a href="https://mineru.net/api/v4">...</a>
      */
     private String apiUrl = "https://mineru.net/api/v4";
