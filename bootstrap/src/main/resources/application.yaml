@@ -244,6 +244,8 @@ rustfs:
   url: http://localhost:9000
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}
   secret-access-key: ${RUSTFS_SECRET_KEY:rustfsadmin}
+  # 多模态解析产物 bucket（PDF 抽出的图片、未来 PNG 原图等），与原始文档 bucket 隔离
+  asset-bucket: ragent-assets
 
 # Tika 解析 PDF 时，PDFBox 扫描系统字体目录构建缓存、对未内嵌字体（如 STSong-Light）做回退，
 # 会刷大量无业务意义的 WARN。降到 ERROR 级静音（真正致命的 PDF 解析 ERROR 仍可见）。
@@ -251,6 +253,19 @@ logging:
   level:
     org.apache.fontbox: ERROR
     org.apache.pdfbox.pdmodel.font: ERROR
+
+# MinerU SaaS API 配置（PDF / Word / PPT 走 MinerU 解析）
+mineru:
+  enabled: false
+  api-url: https://mineru.net/api/v4
+  api-key: ${MINERU_API_KEY:}
+  poll-interval-seconds: 5
+  timeout-seconds: 300
+  enable-table: true
+  enable-formula: true
+  ocr: false
+  language: ch
+  concurrency-limit: 5
 
 sa-token:
   token-name: Authorization

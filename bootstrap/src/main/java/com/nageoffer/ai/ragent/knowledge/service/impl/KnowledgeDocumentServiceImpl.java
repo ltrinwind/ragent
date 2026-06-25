@@ -30,13 +30,19 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nageoffer.ai.ragent.core.chunk.ChunkEmbeddingService;
+import com.nageoffer.ai.ragent.core.chunk.ChunkPostProcessor;
+import com.nageoffer.ai.ragent.core.chunk.ChunkPostResult;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategy;
-import com.nageoffer.ai.ragent.core.chunk.ChunkingStrategyFactory;
+import com.nageoffer.ai.ragent.core.chunk.StructuredChunkingService;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.core.image.ImageProcessingService;
+import com.nageoffer.ai.ragent.core.image.MultimodalChunkEnrichmentService;
+import com.nageoffer.ai.ragent.core.parser.BlockTextRenderer;
+import com.nageoffer.ai.ragent.core.parser.DocumentParser;
 import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
-import com.nageoffer.ai.ragent.core.parser.ParserType;
+import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
+import com.nageoffer.ai.ragent.core.parser.model.ParsedDocument;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.framework.mq.producer.MessageQueueProducer;
@@ -46,6 +52,7 @@ import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.PipelineDefinition;
 import com.nageoffer.ai.ragent.ingestion.engine.IngestionEngine;
 import com.nageoffer.ai.ragent.ingestion.service.IngestionPipelineService;
+import com.nageoffer.ai.ragent.ingestion.util.MimeTypeDetector;
 import com.nageoffer.ai.ragent.knowledge.config.KnowledgeScheduleProperties;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeChunkCreateRequest;
 import com.nageoffer.ai.ragent.knowledge.controller.request.KnowledgeDocumentPageRequest;
@@ -74,6 +81,7 @@ import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentScheduleServic
 import com.nageoffer.ai.ragent.knowledge.service.KnowledgeDocumentService;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorSpaceId;
 import com.nageoffer.ai.ragent.rag.core.vector.VectorStoreService;
+import com.nageoffer.ai.ragent.rag.config.RagMultimodalProperties;
 import com.nageoffer.ai.ragent.rag.dto.StoredFileDTO;
 import com.nageoffer.ai.ragent.rag.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
@@ -86,6 +94,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -103,7 +112,10 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeDocumentMapper documentMapper;
     private final DocumentParserSelector parserSelector;
-    private final ChunkingStrategyFactory chunkingStrategyFactory;
+    private final StructuredChunkingService structuredChunkingService;
+    private final MultimodalChunkEnrichmentService multimodalChunkEnrichmentService;
+    private final ImageProcessingService imageProcessingService;
+    private final RagMultimodalProperties multimodalProperties;
     private final FileStorageService fileStorageService;
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
@@ -262,6 +274,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                     req.setContentType(vc.getContentType().getValue());
                     req.setImageUrl(vc.getImageUrl());
                     req.setImageMimeType(vc.getImageMimeType());
+                    req.setParentId(vc.getParentId());
                     return req;
                 })
                 .toList();
@@ -310,20 +323,59 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         ChunkingOptions config = buildChunkingOptions(chunkingMode, documentDO);
 
         long extractStart = System.currentTimeMillis();
+
+        // 读出全量字节(与 runPipelineProcess 一致)，用于 MIME 探测 + parseStructured
+        byte[] fileBytes;
         try (InputStream is = fileStorageService.openStream(documentDO.getFileUrl())) {
-            String text = parserSelector.select(ParserType.TIKA.getType()).extractText(is, documentDO.getDocName());
+            fileBytes = is.readAllBytes();
+        } catch (Exception e) {
+            throw new RuntimeException("读取文件内容失败：docId=" + documentDO.getId(), e);
+        }
+
+        if (fileBytes.length == 0) {
+            throw new RuntimeException("文件内容为空：docId=" + documentDO.getId());
+        }
+        try {
+            // 按 MIME 路由(与 PIPELINE/ParserNode 同一套规则)：PDF/Word/PPT 命中 MinerU，不再硬编码 Tika
+            String docName = documentDO.getDocName();
+            String mimeType = MimeTypeDetector.detect(fileBytes, docName);
+            if (mimeType == null) {
+                throw new RuntimeException("无法识别文件 MIME 类型：docId=" + documentDO.getId() + ", docName=" + docName);
+            }
+
+            DocumentParser parser = parserSelector.selectByMimeType(mimeType);
+            if (parser == null) {
+                throw new RuntimeException("未找到 MIME [" + mimeType + "] 对应的解析器,docId=" + documentDO.getId());
+            }
+            log.info("文档分块-文本提取 docId={} docName={} fileType={} mimeType={} 命中解析器={}",
+                    documentDO.getId(), docName, documentDO.getFileType(), mimeType, parser.getParserType());
+
+            // MinerU 仅实现 parseStructured（未覆写 extractText），统一走结构化解析路径
+            Map<String, Object> options = new HashMap<>();
+            options.put("sourceFile", docName);
+            ParsedDocument parsed = parser.parseStructured(fileBytes, mimeType, options);
+            // blocks 非空走 block-aware（表格/列表等结构化切分），否则用拍平文本走 legacy 策略
+            String text = BlockTextRenderer.render(parsed.blocks());
             long extractDuration = System.currentTimeMillis() - extractStart;
 
-            ChunkingStrategy chunkingStrategy = chunkingStrategyFactory.requireStrategy(chunkingMode);
             long chunkStart = System.currentTimeMillis();
-            List<VectorChunk> chunks = chunkingStrategy.chunk(text, config);
+            List<VectorChunk> chunks = structuredChunkingService.chunk(
+                    parsed.blocks(), text, chunkingMode, config, null);
+            chunks = appendExtractedImageChunks(chunks, parsed, kbDO.getCollectionName());
             long chunkDuration = System.currentTimeMillis() - chunkStart;
+            if (chunks.isEmpty()) {
+                throw new RuntimeException("分块结果为空：docId=" + documentDO.getId());
+            }
+
+            ChunkPostProcessor postProcessor = chunkingMode.getPostProcessor();
+            ChunkPostResult postResult = postProcessor.process(chunks, IngestionContext.builder().build());
+            multimodalChunkEnrichmentService.enrich(postResult.getContextChunks());
 
             long embedStart = System.currentTimeMillis();
-            chunkEmbeddingService.embed(chunks, embeddingModel);
+            chunkEmbeddingService.embed(postResult.getChunksToEmbed(), embeddingModel);
             long embedDuration = System.currentTimeMillis() - embedStart;
 
-            return new ChunkProcessResult(chunks, extractDuration, chunkDuration, embedDuration);
+            return new ChunkProcessResult(postResult.getContextChunks(), extractDuration, chunkDuration, embedDuration);
         } catch (Exception e) {
             throw new RuntimeException("文档内容提取或分块失败", e);
         }
@@ -331,6 +383,33 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     private record ChunkProcessResult(List<VectorChunk> chunks, long extractDuration, long chunkDuration,
                                       long embedDuration) {
+    }
+
+    private List<VectorChunk> appendExtractedImageChunks(List<VectorChunk> chunks, ParsedDocument parsed,
+                                                         String bucketName) {
+        List<ExtractedImage> images = extractImages(parsed.metadata().get("extractedImages"));
+        if (!multimodalProperties.isEnabled() || images.isEmpty()) {
+            return chunks;
+        }
+        ImageProcessingService.ProcessResult result =
+                imageProcessingService.processImages(images, chunks.size(), bucketName);
+        if (result.chunks().isEmpty()) {
+            return chunks;
+        }
+        List<VectorChunk> merged = new ArrayList<>(chunks.size() + result.chunks().size());
+        merged.addAll(chunks);
+        merged.addAll(result.chunks());
+        return merged;
+    }
+
+    private List<ExtractedImage> extractImages(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) {
+            return List.of();
+        }
+        return list.stream()
+                .filter(ExtractedImage.class::isInstance)
+                .map(ExtractedImage.class::cast)
+                .toList();
     }
 
     private record ProcessModeConfig(ProcessMode processMode, ChunkingMode chunkingMode, String chunkConfig,

@@ -19,17 +19,29 @@ package com.nageoffer.ai.ragent.ingestion.node;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nageoffer.ai.ragent.core.chunk.*;
+import com.nageoffer.ai.ragent.core.chunk.ChunkEmbeddingService;
+import com.nageoffer.ai.ragent.core.chunk.ChunkPostProcessor;
+import com.nageoffer.ai.ragent.core.chunk.ChunkPostResult;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
+import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
+import com.nageoffer.ai.ragent.core.chunk.StructuredChunkingService;
+import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
+import com.nageoffer.ai.ragent.core.image.ImageProcessingService;
+import com.nageoffer.ai.ragent.core.image.MultimodalChunkEnrichmentService;
+import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
+import com.nageoffer.ai.ragent.core.parser.model.Block;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.IngestionNodeType;
 import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import com.nageoffer.ai.ragent.ingestion.domain.result.NodeResult;
 import com.nageoffer.ai.ragent.ingestion.domain.settings.ChunkerSettings;
+import com.nageoffer.ai.ragent.rag.config.RagMultimodalProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -42,8 +54,11 @@ import java.util.List;
 public class ChunkerNode implements IngestionNode {
 
     private final ObjectMapper objectMapper;
-    private final ChunkingStrategyFactory chunkingStrategyFactory;
     private final ChunkEmbeddingService chunkEmbeddingService;
+    private final StructuredChunkingService structuredChunkingService;
+    private final MultimodalChunkEnrichmentService multimodalChunkEnrichmentService;
+    private final ImageProcessingService imageProcessingService;
+    private final RagMultimodalProperties multimodalProperties;
 
     @Override
     public String getNodeType() {
@@ -52,36 +67,67 @@ public class ChunkerNode implements IngestionNode {
 
     @Override
     public NodeResult execute(IngestionContext context, NodeConfig config) {
-        String text = StringUtils.hasText(context.getEnhancedText()) ? context.getEnhancedText() : context.getRawText();
-        if (!StringUtils.hasText(text)) {
-            return NodeResult.fail(new ClientException("可分块文本为空"));
-        }
         ChunkerSettings settings = parseSettings(config.getSettings());
         ChunkingMode chunkingMode = settings.getStrategy();
-        ChunkingStrategy chunker = chunkingStrategyFactory.requireStrategy(chunkingMode);
 
-        ChunkingOptions chunkConfig = convertToChunkConfig(settings);
-        List<VectorChunk> results = chunker.chunk(text, chunkConfig);
+        // blocks 非空走 block-aware，否则用纯文本走 legacy（判断收口在 StructuredChunkingService）
+        List<Block> blocks = context.getDocument() == null ? null : context.getDocument().getBlocks();
+        boolean hasBlocks = blocks != null && !blocks.isEmpty();
+        String text = StringUtils.hasText(context.getEnhancedText())
+                ? context.getEnhancedText()
+                : context.getRawText();
+        ChunkingOptions options = settings.getStrategy()
+                .createDefaultOptions(settings.getChunkSize(), settings.getOverlapSize());
+
+        List<VectorChunk> chunks = structuredChunkingService.chunk(
+                blocks, text, settings.getStrategy(), options, settings.getRowsPerChunk());
+
+        if (chunks.isEmpty()) {
+            return NodeResult.fail(new ClientException(hasBlocks ? "分块结果为空" : "可分块文本为空"));
+        }
+        chunks = appendExtractedImageChunks(chunks, context);
 
         // 后处理：由策略自身决定如何处理分块结果（如父子分块需要拆分父/子块）
         ChunkPostProcessor postProcessor = chunkingMode.getPostProcessor();
-        ChunkPostResult postResult = postProcessor.process(results, context);
+        ChunkPostResult postResult = postProcessor.process(chunks, context);
+        multimodalChunkEnrichmentService.enrich(postResult.getContextChunks());
 
         // 嵌入：只对需要嵌入的 chunks 生成向量
         chunkEmbeddingService.embed(postResult.getChunksToEmbed(), context.getEmbeddingModel());
 
         context.setChunks(postResult.getContextChunks());
-        return NodeResult.ok(postResult.getSummary());
+        return NodeResult.ok(postResult.getSummary() + ", path=" + (hasBlocks ? "block-aware" : "legacy-text"));
     }
 
-    private ChunkingOptions convertToChunkConfig(ChunkerSettings settings) {
-        return settings.getStrategy().createDefaultOptions(
-                settings.getChunkSize(), settings.getOverlapSize());
+    private List<VectorChunk> appendExtractedImageChunks(List<VectorChunk> chunks, IngestionContext context) {
+        List<ExtractedImage> images = context.getExtractedImages();
+        if (!multimodalProperties.isEnabled() || images == null || images.isEmpty()) {
+            return chunks;
+        }
+        String bucketName = context.getVectorSpaceId() != null
+                ? context.getVectorSpaceId().getLogicalName()
+                : "knowledge";
+        ImageProcessingService.ProcessResult result =
+                imageProcessingService.processImages(images, chunks.size(), bucketName);
+        context.setExtractedImages(List.of());
+        if (result.chunks().isEmpty()) {
+            return chunks;
+        }
+        List<VectorChunk> merged = new ArrayList<>(chunks.size() + result.chunks().size());
+        merged.addAll(chunks);
+        merged.addAll(result.chunks());
+        return merged;
     }
 
     private ChunkerSettings parseSettings(JsonNode node) {
         ChunkerSettings settings = objectMapper.convertValue(node, ChunkerSettings.class);
-        if (settings.getChunkSize() == null || settings.getChunkSize() <= 0) {
+        if (settings.getStrategy() == null) {
+            settings.setStrategy(ChunkingMode.STRUCTURE_AWARE);
+        }
+        // 放行 -1（不分块哨兵）；其余 null / 非正值回落默认 512
+        Integer chunkSize = settings.getChunkSize();
+        if (chunkSize == null
+                || (chunkSize <= 0 && chunkSize != StructuredChunkingService.WHOLE_DOCUMENT_SENTINEL)) {
             settings.setChunkSize(512);
         }
         if (settings.getOverlapSize() == null || settings.getOverlapSize() < 0) {

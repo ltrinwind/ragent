@@ -18,6 +18,10 @@
 package com.nageoffer.ai.ragent.core.parser;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import com.nageoffer.ai.ragent.core.parser.model.Block;
+import com.nageoffer.ai.ragent.core.parser.model.ParagraphBlock;
+import com.nageoffer.ai.ragent.core.parser.model.ParsedDocument;
+import com.nageoffer.ai.ragent.core.parser.model.Provenance;
 import com.nageoffer.ai.ragent.framework.exception.ServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
@@ -29,6 +33,8 @@ import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
 import org.apache.tika.parser.pdf.PDFParserConfig;
 import org.apache.tika.sax.BodyContentHandler;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
@@ -42,6 +48,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Apache Tika 文档解析器
@@ -49,11 +56,11 @@ import java.util.Set;
  * 支持多种文档格式：PDF、Word、Excel、PPT、HTML、XML 等
  * 使用 Apache Tika 库进行文档解析和文本提取
  * <p>
- * Pipeline 模式使用 {@link #parse(byte[], String, Map)} 提取文本和图片
- * Chunk 模式使用 {@link #extractText(InputStream, String)} 仅提取文本
+ * 使用底层 Tika Parser 同时提取文本和嵌入图片，再转换为结构化段落 blocks。
  */
 @Slf4j
 @Component
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class TikaDocumentParser implements DocumentParser {
 
     private static final Tika TIKA = new Tika();
@@ -76,42 +83,59 @@ public class TikaDocumentParser implements DocumentParser {
     }
 
     /**
+     * 结构化解析：文本按空行分段输出 ParagraphBlock，并把 Tika 提取到的图片放入 metadata。
+     */
+    @Override
+    public ParsedDocument parseStructured(byte[] content, String mimeType, Map<String, Object> options) {
+        if (content == null || content.length == 0) {
+            return ParsedDocument.of(List.of());
+        }
+
+        ParseResult result = parse(content, mimeType, options);
+
+        Provenance prov = Provenance.ofFile(extractSourceFile(options));
+        List<Block> blocks = new ArrayList<>();
+        for (String segment : result.text().split("\\n{2,}")) {
+            String trimmed = segment.strip();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            blocks.add(new ParagraphBlock(UUID.randomUUID().toString(), prov, List.of(), trimmed));
+        }
+        return ParsedDocument.of(blocks, Map.of(
+                "parser", getParserType(),
+                "mimeType", mimeType == null ? "" : mimeType,
+                "extractedImages", result.images()
+        ));
+    }
+
+    /**
      * 解析文档，同时提取文本和嵌入图片。
-     * 此方法使用底层 Parser.parse() API，启用图片提取。
-     * <p>
-     * Pipeline 模式通过 ParserNode 调用此方法。
      */
     @Override
     public ParseResult parse(byte[] content, String mimeType, Map<String, Object> options) {
         if (content == null || content.length == 0) {
             return ParseResult.ofText("");
         }
-
         try (ByteArrayInputStream is = new ByteArrayInputStream(content)) {
-            // 使用底层 Parser.parse() API 以支持图片提取
             AutoDetectParser parser = new AutoDetectParser();
-            BodyContentHandler handler = new BodyContentHandler(-1); // -1 = no limit
+            BodyContentHandler handler = new BodyContentHandler(-1);
 
             ParseContext parseContext = new ParseContext();
             parseContext.set(Parser.class, parser);
 
-            // 配置 PDF 图片提取
             PDFParserConfig pdfConfig = new PDFParserConfig();
             pdfConfig.setExtractInlineImages(true);
             pdfConfig.setExtractUniqueInlineImagesOnly(true);
             parseContext.set(PDFParserConfig.class, pdfConfig);
 
-            // 自定义 EmbeddedDocumentExtractor 收集图片
             ImageCollectingExtractor imageExtractor = new ImageCollectingExtractor(parseContext);
             parseContext.set(EmbeddedDocumentExtractor.class, imageExtractor);
 
-            // 执行解析
             parser.parse(is, handler, new Metadata(), parseContext);
 
             String cleaned = TextCleanupUtil.cleanup(handler.toString());
-            List<ExtractedImage> images = imageExtractor.getCollectedImages();
-
-            return ParseResult.of(cleaned, Map.of(), images);
+            return ParseResult.of(cleaned, Map.of("parser", getParserType()), imageExtractor.getCollectedImages());
         } catch (Exception e) {
             log.error("Tika 解析失败，MIME 类型: {}", mimeType, e);
             throw new ServiceException("文档解析失败: " + e.getMessage());
@@ -120,9 +144,6 @@ public class TikaDocumentParser implements DocumentParser {
 
     /**
      * 仅提取文本内容。
-     * 此方法使用简化的 TIKA.parseToString() API，不提取图片。
-     * <p>
-     * Chunk 模式使用此方法，行为保持不变。
      */
     @Override
     public String extractText(InputStream stream, String fileName) {
@@ -135,10 +156,35 @@ public class TikaDocumentParser implements DocumentParser {
         }
     }
 
+    private String extractSourceFile(Map<String, Object> options) {
+        if (options == null) {
+            return "";
+        }
+        Object v = options.get("sourceFile");
+        return v == null ? "" : v.toString();
+    }
+
     @Override
     public boolean supports(String mimeType) {
-        // Tika 支持大部分常见文档格式
-        return mimeType != null && !mimeType.startsWith("text/markdown");
+        if (mimeType == null) {
+            return false;
+        }
+        String lower = mimeType.toLowerCase(java.util.Locale.ROOT);
+        if (lower.startsWith("text/markdown") || lower.startsWith("text/x-markdown")) {
+            return false;
+        }
+        if (lower.startsWith("text/")) {
+            return true;
+        }
+        return lower.contains("pdf")
+                || lower.contains("word")
+                || lower.contains("msword")
+                || lower.contains("presentation")
+                || lower.contains("powerpoint")
+                || lower.equals("application/json")
+                || lower.equals("application/xml")
+                || lower.equals("application/xhtml+xml")
+                || lower.equals("application/rtf");
     }
 
     /**

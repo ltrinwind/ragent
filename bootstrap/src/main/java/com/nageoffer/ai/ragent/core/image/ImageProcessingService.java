@@ -21,6 +21,7 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
 import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
+import com.nageoffer.ai.ragent.core.parser.model.AssetRef;
 import com.nageoffer.ai.ragent.ingestion.domain.enums.ChunkContentType;
 import com.nageoffer.ai.ragent.rag.config.RagMultimodalProperties;
 import com.nageoffer.ai.ragent.rag.dto.StoredFileDTO;
@@ -115,9 +116,11 @@ public class ImageProcessingService {
         String fileName = "img_" + originalIndex + "." + extensionFromMimeType(image.mimeType());
         StoredFileDTO stored = fileStorageService.upload(bucketName, image.data(), fileName, image.mimeType());
         String imageUrl = stored.getUrl();
+        String publicUrl = fileStorageService.getPublicUrl(imageUrl);
 
         // 2. 调用 VLM 生成描述
         String description = imageDescriptionService.describe(image.data(), image.mimeType());
+        String blockId = "extracted-image-" + originalIndex;
 
         // 3. 构造图片 VectorChunk
         return VectorChunk.builder()
@@ -127,9 +130,13 @@ public class ImageProcessingService {
                 .imageUrl(imageUrl)
                 .imageMimeType(image.mimeType())
                 .content("【图片描述】第 " + (originalIndex + 1) + " 张图：" + description)
+                .embeddingText(description)
+                .blockType("IMAGE")
+                .assets(List.of(new AssetRef(imageUrl, publicUrl, imageUrl, image.mimeType(), blockId)))
                 .metadata(Map.of(
                         "imageIndex", originalIndex,
-                        "mimeType", image.mimeType()
+                        "mimeType", image.mimeType(),
+                        "imageDescription", description
                 ))
                 .build();
     }

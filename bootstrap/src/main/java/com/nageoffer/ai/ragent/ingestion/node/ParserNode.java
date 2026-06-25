@@ -19,6 +19,14 @@ package com.nageoffer.ai.ragent.ingestion.node;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nageoffer.ai.ragent.core.parser.BlockTextRenderer;
+import com.nageoffer.ai.ragent.core.parser.DocumentParser;
+import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
+import com.nageoffer.ai.ragent.core.parser.ExtractedImage;
+import com.nageoffer.ai.ragent.core.parser.model.AssetRef;
+import com.nageoffer.ai.ragent.core.parser.model.Block;
+import com.nageoffer.ai.ragent.core.parser.model.ImageBlock;
+import com.nageoffer.ai.ragent.core.parser.model.ParsedDocument;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
 import com.nageoffer.ai.ragent.ingestion.domain.context.StructuredDocument;
@@ -27,16 +35,14 @@ import com.nageoffer.ai.ragent.ingestion.domain.pipeline.NodeConfig;
 import com.nageoffer.ai.ragent.ingestion.domain.result.NodeResult;
 import com.nageoffer.ai.ragent.ingestion.domain.settings.ParserSettings;
 import com.nageoffer.ai.ragent.ingestion.util.MimeTypeDetector;
-import com.nageoffer.ai.ragent.core.parser.DocumentParser;
-import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
-import com.nageoffer.ai.ragent.core.parser.ParseResult;
-import com.nageoffer.ai.ragent.core.parser.ParserType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 文档解析节点
@@ -78,32 +84,64 @@ public class ParserNode implements IngestionNode {
         validateMimeType(settings, mimeType, fileName);
 
         ParserSettings.ParserRule rule = matchRule(settings, mimeType, fileName);
-        DocumentParser parser = parserSelector.select(ParserType.TIKA.getType());
+
+        // v1.1：按 MIME 路由（删除硬编码 Tika）；不匹配显式抛错，不静默兜底
+        DocumentParser parser = parserSelector.selectByMimeType(mimeType);
         if (parser == null) {
-            return NodeResult.fail(new ClientException("未配置 Tika 解析器"));
+            return NodeResult.fail(new ClientException(
+                    "未找到 MIME [" + mimeType + "] 对应的解析器,fileName=" + fileName));
         }
 
-        Map<String, Object> options = rule == null ? Collections.emptyMap() : rule.getOptions();
-        ParseResult result = parser.parse(context.getRawBytes(), mimeType, options);
-        context.setRawText(result.text());
+        Map<String, Object> ruleOptions = rule == null ? null : rule.getOptions();
+        Map<String, Object> options = new HashMap<>(ruleOptions != null ? ruleOptions : Collections.emptyMap());
 
-        // 将提取的图片写入 context（供后续 ImageDescriptionNode 使用）
-        if (result.images() != null && !result.images().isEmpty()) {
-            context.setExtractedImages(result.images());
+        // 把 sourceFile 注入 options，供解析器写入 Provenance.sourceFile
+        if (StringUtils.hasText(fileName) && !options.containsKey("sourceFile")) {
+            options.put("sourceFile", fileName);
         }
 
-        // 将 ParseResult 转换为 StructuredDocument
+        // v1.1：调 parseStructured 拿结构化 Block 列表
+        ParsedDocument parsed = parser.parseStructured(context.getRawBytes(), mimeType, options);
+        List<Block> blocks = parsed.blocks() == null ? List.of() : parsed.blocks();
+
+        // 从 blocks 渲染纯文本（给老路径 / ChunkerNode fallback 用）
+        String renderedText = BlockTextRenderer.render(blocks);
+        context.setRawText(renderedText);
+
+        List<ExtractedImage> extractedImages = extractImages(parsed.metadata().get("extractedImages"));
+        if (!extractedImages.isEmpty()) {
+            context.setExtractedImages(extractedImages);
+        }
+
+        List<AssetRef> assets = blocks.stream()
+                .filter(ImageBlock.class::isInstance)
+                .map(ImageBlock.class::cast)
+                .map(ImageBlock::asset)
+                .filter(Objects::nonNull)
+                .toList();
+        if (!assets.isEmpty()) {
+            context.setAssets(assets);
+        }
+
         StructuredDocument document = StructuredDocument.builder()
-                .text(result.text())
-                .metadata(result.metadata())
+                .text(renderedText)
+                .blocks(blocks)
+                .metadata(parsed.metadata())
                 .build();
         context.setDocument(document);
 
-        String msg = "解析文本长度=" + (result.text() == null ? 0 : result.text().length());
-        if (result.images() != null && !result.images().isEmpty()) {
-            msg += "，提取图片=" + result.images().size() + "张";
+        return NodeResult.ok(String.format("解析器=%s, blocks=%d, 文本长度=%d, 提取图片=%d, assets=%d",
+                parser.getParserType(), blocks.size(), renderedText.length(), extractedImages.size(), assets.size()));
+    }
+
+    private List<ExtractedImage> extractImages(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) {
+            return List.of();
         }
-        return NodeResult.ok(msg);
+        return list.stream()
+                .filter(ExtractedImage.class::isInstance)
+                .map(ExtractedImage.class::cast)
+                .toList();
     }
 
     /**
