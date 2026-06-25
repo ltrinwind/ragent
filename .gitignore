@@ -47,3 +47,6 @@ application-local.yaml
 /CLAUDE.md
 /bash.exe.stackdump
 /BACKEND_STUDY_GUIDE.md
+
+### Tmp Out ###
+.output/
