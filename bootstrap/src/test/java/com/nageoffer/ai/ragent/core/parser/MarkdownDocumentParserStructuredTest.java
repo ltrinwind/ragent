@@ -48,9 +48,10 @@ class MarkdownDocumentParserStructuredTest {
                 Map.of("sourceFile", "guide.md")
         );
 
-        assertThat(parsed.blocks())
-                .extracting(Block::getClass)
-                .containsExactly(HeadingBlock.class, ParagraphBlock.class, ImageBlock.class);
+        assertThat(parsed.blocks()).hasSize(3);
+        assertThat(parsed.blocks().get(0)).isInstanceOf(HeadingBlock.class);
+        assertThat(parsed.blocks().get(1)).isInstanceOf(ParagraphBlock.class);
+        assertThat(parsed.blocks().get(2)).isInstanceOf(ImageBlock.class);
 
         ImageBlock image = (ImageBlock) parsed.blocks().get(2);
         assertThat(image.altText()).isEqualTo("RAG 架构图");

@@ -57,6 +57,9 @@ import org.commonmark.node.SoftLineBreak;
 import org.commonmark.node.StrongEmphasis;
 import org.commonmark.node.Text;
 import org.commonmark.parser.Parser;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -69,6 +72,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -337,14 +341,16 @@ public class MinerUResultUnpacker {
         }
 
         /**
-         * 处理 HTML 块:MinerU 的表格等以原始 HTML(如 {@code <table>})嵌在 markdown 里，
-         * commonmark 解析为 HtmlBlock,这里原样保留 HTML 文本写入，避免内容被丢弃
-         * (底层已兼容 HTML，无需转 Markdown 语法)
+         * 处理 HTML 块:MinerU 的 raw table 转为结构化 TableBlock，
+         * 其他 HTML 仍原样保留为 ParagraphBlock，避免内容被丢弃。
          */
         @Override
         public void visit(HtmlBlock htmlBlock) {
             String html = htmlBlock.getLiteral() == null ? "" : htmlBlock.getLiteral().strip();
             if (html.isEmpty()) {
+                return;
+            }
+            if (containsTable(html) && handleHtmlTables(html)) {
                 return;
             }
             blocks.add(new ParagraphBlock(
@@ -353,6 +359,237 @@ public class MinerUResultUnpacker {
                     List.of(),
                     html
             ));
+        }
+
+        /**
+         * 快速判断 HtmlBlock 是否可能包含 table，避免普通 HTML 都走 jsoup 解析。
+         */
+        private static boolean containsTable(String html) {
+            return html.toLowerCase(Locale.ROOT).contains("<table");
+        }
+
+        /**
+         * 解析一个 HtmlBlock 中的所有 table，只有至少解析出一个有效表格才消费该 HtmlBlock。
+         */
+        private boolean handleHtmlTables(String html) {
+            try {
+                Elements tables = Jsoup.parseBodyFragment(html).body().select("table");
+                if (tables.isEmpty()) {
+                    return false;
+                }
+                List<com.nageoffer.ai.ragent.core.parser.model.TableBlock> parsedTables = new ArrayList<>();
+                for (Element table : tables) {
+                    com.nageoffer.ai.ragent.core.parser.model.TableBlock block = parseHtmlTable(table);
+                    if (block != null) {
+                        parsedTables.add(block);
+                    }
+                }
+                if (parsedTables.isEmpty()) {
+                    return false;
+                }
+                blocks.addAll(parsedTables);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        /**
+         * 将单个 HTML table 转为内部 TableBlock:第一行作为表头，其余行作为数据行。
+         */
+        private com.nageoffer.ai.ragent.core.parser.model.TableBlock parseHtmlTable(Element table) {
+            List<List<String>> grid = expandTableGrid(table);
+            if (grid.isEmpty()) {
+                return null;
+            }
+
+            int width = grid.stream().mapToInt(List::size).max().orElse(0);
+            if (width == 0) {
+                return null;
+            }
+            for (List<String> row : grid) {
+                while (row.size() < width) {
+                    row.add("");
+                }
+            }
+
+            List<String> headers = new ArrayList<>(grid.get(0));
+            List<List<String>> rows = new ArrayList<>();
+            for (int i = 1; i < grid.size(); i++) {
+                rows.add(new ArrayList<>(grid.get(i)));
+            }
+            if (headers.stream().allMatch(String::isEmpty)
+                    && rows.stream().flatMap(List::stream).allMatch(String::isEmpty)) {
+                return null;
+            }
+
+            return new com.nageoffer.ai.ragent.core.parser.model.TableBlock(
+                    UUID.randomUUID().toString(),
+                    provenance,
+                    List.of(),
+                    headers,
+                    rows,
+                    extractCaption(table)
+            );
+        }
+
+        /**
+         * 将 rowspan/colspan 展开成普通二维表，方便后续 chunk 链路复用现有 TableBlock 逻辑。
+         */
+        private static List<List<String>> expandTableGrid(Element table) {
+            List<List<String>> grid = new ArrayList<>();
+            Map<Integer, PendingSpan> rowSpans = new HashMap<>();
+
+            for (Element tr : tableRows(table)) {
+                List<String> row = new ArrayList<>();
+                int col = 0;
+                for (Element cell : tableCells(tr)) {
+                    col = fillPendingSpans(row, rowSpans, col);
+
+                    String text = normalizeHtmlText(cell.text());
+                    int colspan = positiveSpan(cell.attr("colspan"));
+                    int rowspan = positiveSpan(cell.attr("rowspan"));
+                    for (int i = 0; i < colspan; i++) {
+                        setCell(row, col, text);
+                        if (rowspan > 1) {
+                            rowSpans.put(col, new PendingSpan(text, rowspan - 1));
+                        }
+                        col++;
+                    }
+                }
+                col = fillRemainingPendingSpans(row, rowSpans, col);
+                if (!row.isEmpty() && row.stream().anyMatch(cell -> !cell.isEmpty())) {
+                    grid.add(row);
+                }
+            }
+            return grid;
+        }
+
+        /**
+         * 按 HTML 出现顺序收集 table 的直接 tr，以及 thead/tbody/tfoot 下的 tr。
+         */
+        private static List<Element> tableRows(Element table) {
+            List<Element> rows = new ArrayList<>();
+            for (Element child : table.children()) {
+                String tag = child.normalName();
+                if ("tr".equals(tag)) {
+                    rows.add(child);
+                } else if ("thead".equals(tag) || "tbody".equals(tag) || "tfoot".equals(tag)) {
+                    for (Element sectionChild : child.children()) {
+                        if ("tr".equals(sectionChild.normalName())) {
+                            rows.add(sectionChild);
+                        }
+                    }
+                }
+            }
+            return rows;
+        }
+
+        /**
+         * 只读取一行里的 th/td 直接子节点，避免嵌套表格污染当前表格。
+         */
+        private static List<Element> tableCells(Element row) {
+            List<Element> cells = new ArrayList<>();
+            for (Element child : row.children()) {
+                String tag = child.normalName();
+                if ("th".equals(tag) || "td".equals(tag)) {
+                    cells.add(child);
+                }
+            }
+            return cells;
+        }
+
+        /**
+         * 在写入当前单元格前，先补齐前面列上由上一行 rowspan 延续下来的值。
+         */
+        private static int fillPendingSpans(List<String> row, Map<Integer, PendingSpan> rowSpans, int col) {
+            while (rowSpans.containsKey(col)) {
+                applyPendingSpan(row, rowSpans, col);
+                col++;
+            }
+            return col;
+        }
+
+        /**
+         * 行尾补齐仍在延续的 rowspan，保证跨行列不会在本行丢失。
+         */
+        private static int fillRemainingPendingSpans(List<String> row, Map<Integer, PendingSpan> rowSpans, int col) {
+            while (!rowSpans.isEmpty() && col <= maxPendingColumn(rowSpans)) {
+                if (rowSpans.containsKey(col)) {
+                    applyPendingSpan(row, rowSpans, col);
+                } else {
+                    setCell(row, col, "");
+                }
+                col++;
+            }
+            return col;
+        }
+
+        /**
+         * 消费一个待填充的 rowspan 值，并在还需要继续跨行时写回剩余次数。
+         */
+        private static void applyPendingSpan(List<String> row, Map<Integer, PendingSpan> rowSpans, int col) {
+            PendingSpan span = rowSpans.remove(col);
+            setCell(row, col, span.text());
+            if (span.remainingRows() > 1) {
+                rowSpans.put(col, new PendingSpan(span.text(), span.remainingRows() - 1));
+            }
+        }
+
+        /**
+         * 找到当前仍有 rowspan 延续的最大列号，用于判断行尾需要补到哪里。
+         */
+        private static int maxPendingColumn(Map<Integer, PendingSpan> rowSpans) {
+            return rowSpans.keySet().stream().filter(Objects::nonNull).mapToInt(Integer::intValue).max().orElse(-1);
+        }
+
+        /**
+         * 写入指定列，不足的中间列用空字符串补齐。
+         */
+        private static void setCell(List<String> row, int col, String text) {
+            while (row.size() <= col) {
+                row.add("");
+            }
+            row.set(col, text);
+        }
+
+        /**
+         * 读取 rowspan/colspan，缺失、非法或小于 1 时都按 1 处理。
+         */
+        private static int positiveSpan(String raw) {
+            if (raw == null || raw.isBlank()) {
+                return 1;
+            }
+            try {
+                return Math.max(1, Integer.parseInt(raw.trim()));
+            } catch (NumberFormatException e) {
+                return 1;
+            }
+        }
+
+        /**
+         * 提取 table 的直接 caption 子节点文本，空 caption 不写入模型。
+         */
+        private static String extractCaption(Element table) {
+            Element caption = table.selectFirst("> caption");
+            if (caption == null) {
+                return null;
+            }
+            String text = normalizeHtmlText(caption.text());
+            return text.isEmpty() ? null : text;
+        }
+
+        /**
+         * 归一化 HTML 文本中的连续空白，避免换行和 nbsp 进入单元格内容。
+         */
+        private static String normalizeHtmlText(String text) {
+            if (text == null) {
+                return "";
+            }
+            return text.replace('\u00A0', ' ').trim().replaceAll("\\s+", " ");
+        }
+
+        private record PendingSpan(String text, int remainingRows) {
         }
 
         /**
