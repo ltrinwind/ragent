@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nageoffer.ai.ragent.core.parser.BlockTextRenderer;
 import com.nageoffer.ai.ragent.core.parser.DocumentParser;
 import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
+import com.nageoffer.ai.ragent.core.parser.image.ImageBlockDescriptionEnricher;
 import com.nageoffer.ai.ragent.core.parser.model.AssetRef;
 import com.nageoffer.ai.ragent.core.parser.model.Block;
 import com.nageoffer.ai.ragent.core.parser.model.ImageBlock;
@@ -52,10 +53,14 @@ public class ParserNode implements IngestionNode {
 
     private final ObjectMapper objectMapper;
     private final DocumentParserSelector parserSelector;
+    private final ImageBlockDescriptionEnricher imageBlockDescriptionEnricher;
 
-    public ParserNode(ObjectMapper objectMapper, DocumentParserSelector parserSelector) {
+    public ParserNode(ObjectMapper objectMapper,
+                      DocumentParserSelector parserSelector,
+                      ImageBlockDescriptionEnricher imageBlockDescriptionEnricher) {
         this.objectMapper = objectMapper;
         this.parserSelector = parserSelector;
+        this.imageBlockDescriptionEnricher = imageBlockDescriptionEnricher;
     }
 
     @Override
@@ -107,6 +112,7 @@ public class ParserNode implements IngestionNode {
 
         // v1.1：调 parseStructured 拿结构化 Block 列表
         ParsedDocument parsed = parser.parseStructured(context.getRawBytes(), mimeType, options);
+        parsed = imageBlockDescriptionEnricher.enrich(parsed);
         List<Block> blocks = parsed.blocks() == null ? List.of() : parsed.blocks();
 
         // 从 blocks 渲染纯文本（给老路径 / ChunkerNode fallback 用）

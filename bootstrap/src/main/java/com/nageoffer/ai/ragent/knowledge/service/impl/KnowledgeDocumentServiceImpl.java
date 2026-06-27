@@ -40,6 +40,7 @@ import com.nageoffer.ai.ragent.core.parser.BlockTextRenderer;
 import com.nageoffer.ai.ragent.core.parser.DocumentParser;
 import com.nageoffer.ai.ragent.core.parser.DocumentParserSelector;
 import com.nageoffer.ai.ragent.core.parser.ParserType;
+import com.nageoffer.ai.ragent.core.parser.image.ImageBlockDescriptionEnricher;
 import com.nageoffer.ai.ragent.core.parser.model.ParsedDocument;
 import com.nageoffer.ai.ragent.framework.context.UserContext;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
@@ -110,6 +111,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeDocumentMapper documentMapper;
     private final DocumentParserSelector parserSelector;
     private final StructuredChunkingService structuredChunkingService;
+    private final ImageBlockDescriptionEnricher imageBlockDescriptionEnricher;
     private final FileStorageService fileStorageService;
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
@@ -365,6 +367,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             options.put("sourceFile", docName);
             options.put("documentId", documentDO.getId());
             ParsedDocument parsed = parser.parseStructured(fileBytes, mimeType, options);
+            parsed = imageBlockDescriptionEnricher.enrich(parsed);
             // blocks 非空走 block-aware（表格/列表等结构化切分），否则用拍平文本走 legacy 策略
             String text = BlockTextRenderer.render(parsed.blocks());
             long extractDuration = System.currentTimeMillis() - extractStart;
