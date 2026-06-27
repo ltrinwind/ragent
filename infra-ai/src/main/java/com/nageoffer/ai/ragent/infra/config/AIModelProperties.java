@@ -57,9 +57,9 @@ public class AIModelProperties {
     private ModelGroup rerank = new ModelGroup();
 
     /**
-     * 视觉理解模型组配置
+     * 视觉大模型组配置（图生文，知识库入库期使用）
      */
-    private ModelGroup vision = new ModelGroup();
+    private ModelGroup vlm = new ModelGroup();
 
     /**
      * Rerank 相关性分数下限（relevance_score，bge-reranker / qwen3-rerank 均归一到 [0,1]）。

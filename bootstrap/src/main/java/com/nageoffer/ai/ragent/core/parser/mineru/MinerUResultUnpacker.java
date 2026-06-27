@@ -124,8 +124,8 @@ public class MinerUResultUnpacker {
             throw new ServiceException("MinerU zip 中未找到 markdown 文件");
         }
 
-        // 上传所有图片到 RustFS,得 {zipPath → rustfsUrl} 映射
-        Map<String, String> imageUrlMap = uploadImages(contents.images, documentId);
+        // 上传所有图片到 RustFS,得 {zipPath → Asset} 映射
+        Map<String, UploadedImage> imageUrlMap = uploadImages(contents.images, documentId);
 
         // 解析 markdown 输出 Block 列表
         Provenance prov = Provenance.ofFile(sourceFile);
@@ -190,8 +190,8 @@ public class MinerUResultUnpacker {
     /**
      * 上传所有图片到 RustFS，返回 {zipPath → 公开访问 URL}
      */
-    private Map<String, String> uploadImages(Map<String, byte[]> images, String documentId) {
-        Map<String, String> result = new HashMap<>();
+    private Map<String, UploadedImage> uploadImages(Map<String, byte[]> images, String documentId) {
+        Map<String, UploadedImage> result = new HashMap<>();
         for (Map.Entry<String, byte[]> e : images.entrySet()) {
             String zipPath = e.getKey();
             byte[] data = e.getValue();
@@ -202,7 +202,7 @@ public class MinerUResultUnpacker {
                 StoredFileDTO stored = fileStorageService.upload(assetBucket, data, filename, mime);
                 // 转为浏览器可直连的公开 URL(asset-bucket 已开公共读)，供 markdown 图片链接固化入库
                 String publicUrl = fileStorageService.getPublicUrl(stored.getUrl());
-                result.put(zipPath, publicUrl);
+                result.put(zipPath, new UploadedImage(stored.getUrl(), publicUrl, mime));
                 log.debug("MinerU 图片上传 zipPath={} → {}", zipPath, publicUrl);
             } catch (Exception ex) {
                 log.error("MinerU 图片上传失败 zipPath={}", zipPath, ex);
@@ -210,6 +210,9 @@ public class MinerUResultUnpacker {
             }
         }
         return result;
+    }
+
+    private record UploadedImage(String storageUrl, String publicUrl, String mime) {
     }
 
     private static String extractExt(String path) {
@@ -242,10 +245,10 @@ public class MinerUResultUnpacker {
     private static final class UnpackVisitor extends AbstractVisitor {
 
         private final Provenance provenance;
-        private final Map<String, String> imageUrlMap;
+        private final Map<String, UploadedImage> imageUrlMap;
         private final List<Block> blocks = new ArrayList<>();
 
-        UnpackVisitor(Provenance provenance, Map<String, String> imageUrlMap) {
+        UnpackVisitor(Provenance provenance, Map<String, UploadedImage> imageUrlMap) {
             this.provenance = provenance;
             this.imageUrlMap = imageUrlMap;
         }
@@ -363,45 +366,44 @@ public class MinerUResultUnpacker {
 
         private void handleStandaloneImage(Image image) {
             String rawDest = image.getDestination();
-            String resolved = resolveImageUrl(rawDest);
+            UploadedImage resolved = resolveImage(rawDest);
+            String publicUrl = resolved == null ? rawDest : resolved.publicUrl();
             String caption = extractInlineText(image);
             String blockId = UUID.randomUUID().toString();
 
-            AssetRef asset = new AssetRef(
-                    resolved,
-                    inferMimeFromUrl(resolved),
-                    blockId
-            );
+            AssetRef asset = resolved == null
+                    ? new AssetRef(publicUrl, inferMimeFromUrl(publicUrl), blockId)
+                    : new AssetRef(resolved.storageUrl(), resolved.publicUrl(), rawDest, resolved.mime(), blockId);
             blocks.add(new ImageBlock(
                     blockId, provenance, List.of(),
                     asset, caption, caption
             ));
         }
 
-        private String resolveImageUrl(String rawDest) {
+        private UploadedImage resolveImage(String rawDest) {
             if (rawDest == null) {
-                return "";
+                return null;
             }
             // 优先精确匹配
-            String url = imageUrlMap.get(rawDest);
-            if (url != null) {
-                return url;
+            UploadedImage image = imageUrlMap.get(rawDest);
+            if (image != null) {
+                return image;
             }
             // 尝试模糊匹配(MinerU markdown 里可能用 ./images/xxx 或 images/xxx)
             String norm = rawDest.replaceFirst("^\\./", "");
-            url = imageUrlMap.get(norm);
-            if (url != null) {
-                return url;
+            image = imageUrlMap.get(norm);
+            if (image != null) {
+                return image;
             }
             // 用文件名匹配兜底
             int idx = norm.lastIndexOf('/');
             String fileName = idx >= 0 ? norm.substring(idx + 1) : norm;
-            for (Map.Entry<String, String> e : imageUrlMap.entrySet()) {
+            for (Map.Entry<String, UploadedImage> e : imageUrlMap.entrySet()) {
                 if (e.getKey().endsWith("/" + fileName) || e.getKey().equals(fileName)) {
                     return e.getValue();
                 }
             }
-            return rawDest;
+            return null;
         }
 
         private static String inferMimeFromUrl(String url) {
@@ -504,7 +506,8 @@ public class MinerUResultUnpacker {
             } else if (node instanceof Image img) {
                 // inline 图片(非 standalone)保留 [alt](rustfsUrl) 形式
                 String alt = extractInlineText(img);
-                String resolved = resolveImageUrl(img.getDestination());
+                UploadedImage resolvedImage = resolveImage(img.getDestination());
+                String resolved = resolvedImage == null ? img.getDestination() : resolvedImage.publicUrl();
                 sb.append("![").append(alt).append("](").append(resolved).append(')');
             } else if (node instanceof Emphasis || node instanceof StrongEmphasis) {
                 sb.append(extractInlineText(node));

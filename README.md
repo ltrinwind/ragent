@@ -89,9 +89,9 @@ Ragent 是一个企业级 Agentic RAG 平台，覆盖从文档入库到智能问
 **实现**：打通「图片进得来、出得去」的完整链路，分摄取与推送两段。
 
 **摄取侧（图片 → 描述 → 入库）**：
-- 视觉模型独立服务层：参照 embedding/rerank 模式新增 `VisionClient` → `RoutingVisionService` → `ai.vision` ModelGroup 路由链，三态熔断 + 自动降级，提供 Bailian/Ollama/SiliconFlow/AIHubMix 四个 Provider，不侵入现有 ChatMessage/ChatClient
-- Tika 图片提取：自定义 `EmbeddedDocumentExtractor` 收集 PDF 内嵌图片，按大小、数量、hash 三重过滤去重
-- Pipeline 新增 `ImageDescriptionNode`：读取提取的图片 → 上传 RustFS → VLM 以 base64 data URI 生成描述 → 构造 `contentType=IMAGE` 的 VectorChunk → 复用现有文本 Embedding 入库
+- 视觉模型独立服务层：使用 upstream 的 `VlmService` / `RoutingVlmService` 与 `ai.vlm` ModelGroup，通过 OpenAI-compatible chat endpoint 发送多模态消息，不侵入现有 ChatMessage/ChatClient
+- 独立图片解析：PNG/JPG/SVG 文件由 `ImageDocumentParser` 在解析阶段调用 VLM 生成描述，并上传原图资产
+- 图片分块：`ImageChunker` 使用描述文本作为 `content` / `embeddingText`，同时保留 `contentType`、`imageUrl`、`imageMimeType` 与 `assets` 元数据，供检索和前端展示使用
 - 统一数据模型：`VectorChunk`/`RetrievedChunk`/`KnowledgeChunkDO` 增加 `contentType`/`imageUrl`/`imageMimeType`，`t_knowledge_chunk` 表新增对应列（`upgrade_v1.3_to_v1.4.sql`）；`PgRetrieverService` 向量检索 JOIN chunk 表回带图片字段，BM25 全文检索同步补充
 
 **检索推送侧（结构化 context + 图片代理）**：
@@ -100,7 +100,7 @@ Ragent 是一个企业级 Agentic RAG 平台，覆盖从文档入库到智能问
 - 持久化 contexts 同步升级为结构化（同列 JSON，零 schema 改动），`parseContexts` 兼容历史 `string[]` 数据回退为 TEXT 条目
 - 修复 `ForwardingStreamCallback` 未转发 `onContext` 的 bug：trace 装饰路径下参考来源事件此前被静默吞掉
 
-**意义**：文档中的图表、表格、截图等视觉信息不再丢失，RAG 覆盖文档全量语义；命中图片时参考来源面板直接展示缩略图 + 描述，从纯文本进化为图文交错。视觉模型独立路由，故障不影响 Chat/Embedding 等其他链路。
+**意义**：独立图片文件可转写为可检索知识文本并保留原图引用；命中图片时参考来源面板直接展示缩略图 + 描述，从纯文本进化为图文交错。视觉模型独立路由，故障不影响 Chat/Embedding 等其他链路。
 
 
 ## 未来计划

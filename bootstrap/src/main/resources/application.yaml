@@ -114,13 +114,17 @@ rag:
     enabled: true
     max-error-length: 1000
 
-  multimodal:
-    enabled: true
-    max-images-per-document: 50
-    image-min-size-kb: 5
-    max-image-bytes: 4194304
-    vlm-concurrency: 4
-    vlm-timeout-seconds: 60
+  # 图片解析（图生文）配置
+  # 产出一段自包含的知识文本：既说清"图是什么"，又完整保留所有文字与层级
+  image-parse:
+    description-prompt: |-
+      请把这张图片的内容转写成一段自包含的知识文本，用于知识库检索与问答，不要描述颜色、布局、字体等视觉样式。要求：
+      1. 开头用一两句话说明这张图是什么（主题、类型、用途），让人不看图也能明白讲的是什么。
+      2. 随后按图中的分组、层级、流程关系，完整转写所有文字内容（OCR），保留每个分组标题与其下属条目的归属关系，不要遗漏任何文字。
+      3. 若是图表、架构图或流程图，请补充说明各部分之间的关系（如包含、调用、先后顺序），而不只是罗列文字。
+      4. 保持术语准确完整，表述贴近用户可能的提问方式。
+      5. 最后另起一行，用一句话自然引出图片（例如"下方为该内容对应的原始图片："），以便在这段文字后紧接着展示图片。
+    max-output-tokens: 4096
 
 ai:
   # rerank 相关性分数下限（relevance_score ∈ [0,1]）：低于该值的 rerank 结果直接丢弃，
@@ -132,21 +136,18 @@ ai:
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
-        vision: /v1/chat/completions
     bailian:
       url: https://dashscope.aliyuncs.com
       api-key: ${BAILIAN_API_KEY:}
       endpoints:
         chat: /compatible-mode/v1/chat/completions
         rerank: /api/v1/services/rerank/text-rerank/text-rerank
-        vision: /compatible-mode/v1/chat/completions
     aihubmix:
       url: https://aihubmix.com
       api-key: ${AIHUBMIX_API_KEY:}
       endpoints:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
-        vision: /v1/chat/completions
     siliconflow:
       url: https://api.siliconflow.cn
       api-key: ${SILICONFLOW_API_KEY:}
@@ -154,7 +155,6 @@ ai:
         chat: /v1/chat/completions
         embedding: /v1/embeddings
         rerank: /v1/rerank
-        vision: /v1/chat/completions
 
   selection:
     failure-threshold: 2
@@ -225,21 +225,14 @@ ai:
         model: noop
         priority: 100
 
-  vision:
-    default-model: qwen3-vl-8b
+  vlm:
+    default-model: qwen-vl-max
     candidates:
-      - id: qwen3-vl-8b
-        provider: siliconflow
-        model: Qwen/Qwen3-VL-8B-Instruct
-        priority: 1
       - id: qwen-vl-max
         provider: bailian
         model: qwen-vl-max
-        priority: 2
-      - id: qwen2.5-vl-local
-        provider: ollama
-        model: qwen2.5vl:7b
-        priority: 3
+        priority: 1
+
 rustfs:
   url: http://localhost:9000
   access-key-id: ${RUSTFS_ACCESS_KEY:rustfsadmin}

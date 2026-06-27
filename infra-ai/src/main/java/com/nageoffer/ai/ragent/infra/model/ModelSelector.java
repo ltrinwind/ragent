@@ -60,8 +60,8 @@ public class ModelSelector {
         return selectCandidates(properties.getRerank());
     }
 
-    public List<ModelTarget> selectVisionCandidates() {
-        return selectCandidates(properties.getVision());
+    public List<ModelTarget> selectVlmCandidates() {
+        return selectCandidates(properties.getVlm());
     }
 
     private String resolveFirstChoiceModel(AIModelProperties.ModelGroup group, boolean deepThinking) {

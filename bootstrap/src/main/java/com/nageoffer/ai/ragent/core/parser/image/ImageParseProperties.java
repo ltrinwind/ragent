@@ -15,29 +15,28 @@
  * limitations under the License.
  */
 
-package com.nageoffer.ai.ragent.infra.vision;
+package com.nageoffer.ai.ragent.core.parser.image;
 
-import com.nageoffer.ai.ragent.infra.model.ModelTarget;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 /**
- * 视觉理解客户端接口
- * 用于通过视觉语言模型（VLM）对图片进行理解和描述
+ * 图片解析配置（图生文）
  */
-public interface VisionClient {
+@Data
+@Component
+@ConfigurationProperties(prefix = "rag.image-parse")
+public class ImageParseProperties {
 
     /**
-     * 获取视觉服务提供商名称
-     *
-     * @return 提供商标识字符串
+     * 图生文引导提示词:要求 VLM 输出中文描述 + 图中文字 OCR
      */
-    String provider();
+    private String descriptionPrompt = "请用中文详细描述这张图片的内容；若图中包含文字，请逐字识别并完整列出（OCR）。"
+            + "先给出整体内容描述，再用\"图中文字：\"另起一段列出识别到的所有文字。";
 
     /**
-     * 使用视觉模型对图片进行描述
-     *
-     * @param request 视觉请求（包含 base64 图片和 prompt）
-     * @param target  目标模型配置
-     * @return 模型生成的图片描述文本
+     * 描述输出 token 上限,控成本与 embedding 体量;<=0 表示不限制
      */
-    String describe(VisionRequest request, ModelTarget target);
+    private Integer maxOutputTokens = 1024;
 }

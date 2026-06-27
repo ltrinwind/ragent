@@ -26,7 +26,6 @@ import com.nageoffer.ai.ragent.core.chunk.ChunkingMode;
 import com.nageoffer.ai.ragent.core.chunk.ChunkingOptions;
 import com.nageoffer.ai.ragent.core.chunk.StructuredChunkingService;
 import com.nageoffer.ai.ragent.core.chunk.VectorChunk;
-import com.nageoffer.ai.ragent.core.image.MultimodalChunkEnrichmentService;
 import com.nageoffer.ai.ragent.core.parser.model.Block;
 import com.nageoffer.ai.ragent.framework.exception.ClientException;
 import com.nageoffer.ai.ragent.ingestion.domain.context.IngestionContext;
@@ -52,7 +51,6 @@ public class ChunkerNode implements IngestionNode {
     private final ObjectMapper objectMapper;
     private final ChunkEmbeddingService chunkEmbeddingService;
     private final StructuredChunkingService structuredChunkingService;
-    private final MultimodalChunkEnrichmentService multimodalChunkEnrichmentService;
 
     @Override
     public String getNodeType() {
@@ -83,7 +81,6 @@ public class ChunkerNode implements IngestionNode {
         // 后处理：由策略自身决定如何处理分块结果（如父子分块需要拆分父/子块）
         ChunkPostProcessor postProcessor = chunkingMode.getPostProcessor();
         ChunkPostResult postResult = postProcessor.process(chunks, context);
-        multimodalChunkEnrichmentService.enrich(postResult.getContextChunks());
 
         // 嵌入：只对需要嵌入的 chunks 生成向量
         chunkEmbeddingService.embed(postResult.getChunksToEmbed(), context.getEmbeddingModel());
